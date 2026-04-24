@@ -1,5 +1,5 @@
 {
-  "name": "app-template",
+  "name": "app-eos-pulse",
   "version": "0.1.0",
   "description": "MSPBots React full-stack template with modern UI components and micro-frontend support",
   "type": "module",
@@ -41,7 +41,7 @@
     "hasBackend": true,
     "permissions": {},
     "version": "0.1.0",
-    "name": "app-template"
+    "name": "app-eos-pulse"
   },
   "scripts": {
     "predev": "cd service && deno install",
