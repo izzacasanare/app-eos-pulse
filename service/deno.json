@@ -1,0 +1,15 @@
+{
+  "nodeModulesDir": "auto",
+  "npmRegistry": "https://npm.mspbots.ai/",
+  "imports": {
+    "hono": "npm:hono@4.12.3",
+    "@mspbots/type": "npm:@mspbots/type@190.0.0"
+  },
+  "include": [
+    "schema.ts",
+    "server.ts"
+  ],
+  "exclude": [
+    "../pages/**/*"
+  ]
+}

@@ -1,0 +1,101 @@
+name: Sync Vibe Coding SOP to GitLab
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Vibe Coding SOP.md'
+
+permissions:
+  contents: read
+
+jobs:
+  sync-and-release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_BRANCH: release
+      TARGET_PATH: templates/react/Vibe Coding SOP.md
+      SOURCE_FILE: Vibe Coding SOP.md
+
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate source file exists
+        run: |
+          echo "[workflow] validating source file: $SOURCE_FILE"
+          test -f "$SOURCE_FILE"
+          echo "[workflow] source file exists"
+
+      - name: Clone target repo release branch
+        env:
+          GITLAB_TOKEN: ${{ secrets.MB_PLATFORM_CLI_PROJECT_ACCESS_TOKEN }}
+        run: |
+          echo "[workflow] cloning target repo branch: $TARGET_BRANCH"
+          rm -rf /tmp/mb-platform-cli
+          git clone --branch "$TARGET_BRANCH" --single-branch "https://oauth2:${GITLAB_TOKEN}@gitlab.mspbots.ai/mb-app-platform/mb-platform-cli.git" /tmp/mb-platform-cli
+          echo "[workflow] clone complete"
+
+      - name: Sync file into target path
+        run: |
+          echo "[workflow] syncing $SOURCE_FILE -> $TARGET_PATH"
+          mkdir -p "/tmp/mb-platform-cli/$(dirname "$TARGET_PATH")"
+          cp "$SOURCE_FILE" "/tmp/mb-platform-cli/$TARGET_PATH"
+          echo "[workflow] file sync complete"
+
+      - name: Commit and push when changed
+        id: sync_target
+        run: |
+          cd /tmp/mb-platform-cli
+          echo "[workflow] checking whether target file actually changed"
+          if git diff --quiet -- "$TARGET_PATH"; then
+            echo "[workflow] no target diff after sync; skipping push and release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "[workflow] target diff detected; committing and pushing to $TARGET_BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$TARGET_PATH"
+          git commit -m "chore: sync Vibe Coding SOP from GitHub ${GITHUB_SHA}"
+          git push origin "$TARGET_BRANCH"
+          echo "[workflow] push complete; release steps enabled"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.sync_target.outputs.should_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        if: steps.sync_target.outputs.should_release == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Run release commands
+        if: steps.sync_target.outputs.should_release == 'true'
+        run: |
+          cd /tmp/mb-platform-cli
+          echo "[workflow] starting release steps"
+          echo "[workflow] installing dependencies"
+          pnpm install
+          if [ -f .changeset/pre.json ]; then
+            echo "[workflow] pre mode detected; running pnpm beta:exit"
+            pnpm beta:exit
+          else
+            echo "[workflow] pre mode not detected; skipping pnpm beta:exit"
+          fi
+          if find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | grep -q .; then
+            echo "[workflow] pending changeset markdown files detected; running pnpm changeset"
+            pnpm changeset
+          else
+            echo "[workflow] no pending changeset markdown files; skipping pnpm changeset"
+          fi
+          echo "[workflow] running pnpm release"
+          pnpm release
+          echo "[workflow] release steps completed"
