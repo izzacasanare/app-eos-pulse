@@ -2,10 +2,18 @@
   "nodeModulesDir": "auto",
   "npmRegistry": "https://npm.mspbots.ai/",
   "imports": {
+    "@tools/database": "npm:@tools/database@^0.1.6",
     "hono": "npm:hono@4.12.3",
-    "@mspbots/type": "npm:@mspbots/type@190.0.0"
+    "@mspbots/type": "npm:@mspbots/type@^224.0.0",
+    "drizzle-orm": "npm:drizzle-orm@^0.45.1",
+    "drizzle-orm/pg-core": "npm:drizzle-orm@^0.45.1/pg-core",
+    "drizzle-orm/postgres-js": "npm:drizzle-orm@^0.45.1/postgres-js",
+    "postgres": "npm:postgres@^3.4.7",
+    "drizzle-kit": "npm:drizzle-kit@^0.31.1"
   },
   "include": [
+    "db.ts",
+    "drizzle.config.ts",
     "schema.ts",
     "server.ts"
   ],

@@ -1,34 +1,29 @@
 /**
  * EOS Pulse — Database Singleton
  *
- * Exports a single Drizzle client instance.
- * Import only from domain/ files — never from handlers/ or server.ts.
+ * Single Drizzle + postgres.js client instance.
+ * Import from domain/ files only — never from handlers/ or server.ts.
  *
- * Requires: DATABASE_URL environment variable
+ * Connection uses direct config (not a URL string).
+ * Credentials fall back to env vars; hard defaults are the known dev values.
  */
 
-// TODO: Add drizzle-orm and postgres driver to deno.json imports
-// import { drizzle } from "drizzle-orm/postgres-js";
-// import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema.ts";
 
-const DATABASE_URL = Deno.env.get("DATABASE_URL");
+const APP_ID = "m4mom3q0m8bw2p9w93urcjeb9x2y4dna";
 
-if (!DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL is required. Add it to your .env file.\n" +
-    "Example: DATABASE_URL=postgres://user:password@localhost:5432/eos_pulse"
-  );
-}
+const client = postgres({
+  host:     Deno.env.get("DB_HOST")     ?? "20.241.40.252",
+  port:     parseInt(Deno.env.get("DB_PORT") ?? "15432"),
+  database: Deno.env.get("DB_NAME")     ?? "mb_app_agentint",
+  username: Deno.env.get("DB_USER")     ?? `user_${APP_ID}`,
+  password: Deno.env.get("DB_PASSWORD") ?? `pass_${APP_ID}`,
+  ssl:      false,
+  max:      10,
+});
 
-// TODO: Uncomment once drizzle-orm is added to deno.json
-// const client = postgres(DATABASE_URL);
-// export const db = drizzle(client);
-
-// Placeholder export — replace with Drizzle instance
-export const db = {
-  _url: DATABASE_URL,
-  _ready: false,
-  _note: "Replace this placeholder with: drizzle(postgres(DATABASE_URL))",
-} as const;
+export const db = drizzle(client, { schema });
 
 export type Database = typeof db;

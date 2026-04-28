@@ -1,216 +1,268 @@
 # EOS Pulse — Data Model
 
-## Tables
-
-### users
-MSPBots staff members. Populated from the platform — no self-registration.
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| id | uuid | PK | |
-| name | text | NOT NULL | |
-| email | text | NOT NULL UNIQUE | |
-| team_id | uuid | FK → teams.id | Primary team assignment |
-| role | text | NOT NULL | `'admin'` \| `'leader'` \| `'member'` |
-| teams_user_id | text | | Microsoft Teams user ID for nudge delivery |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
+> Source of truth: `service/schema.ts`
+> All tables live inside PostgreSQL schema `m4mom3q0m8bw2p9w93urcjeb9x2y4dna` (APP_ID).
+> Never use the `public` schema.
 
 ---
 
+## Connection
+
+| Field    | Value |
+|----------|-------|
+| Host     | `20.241.40.252` |
+| Port     | `15432` |
+| Database | `mb_app_agentint` |
+| Schema   | `m4mom3q0m8bw2p9w93urcjeb9x2y4dna` |
+| User     | `user_m4mom3q0m8bw2p9w93urcjeb9x2y4dna` |
+| Password | `pass_m4mom3q0m8bw2p9w93urcjeb9x2y4dna` |
+
+Credentials sourced from `.env` at runtime. See `docs/SECURITY.md`.
+
+---
+
+## Tables
+
 ### teams
-The 6 MSPBots internal teams.
+
+Represents the 6 MSPBots internal teams.
 
 | Column | Type | Constraints | Notes |
-|---|---|---|---|
+|--------|------|-------------|-------|
+| id | uuid | PK | `crypto.randomUUID()` |
+| name | text | NOT NULL | |
+| type | text | NOT NULL | `'l10'` \| `'quarterly'` \| `'both'` |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
+
+---
+
+### users
+
+MSPBots staff. Populated from the platform — no self-registration.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
 | id | uuid | PK | |
 | name | text | NOT NULL | |
-| lead_id | uuid | FK → users.id | Team lead / L10 facilitator |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
+| email | text | NOT NULL UNIQUE | |
+| role | text | NOT NULL | `'super_admin'` \| `'leadership'` \| `'team_lead'` \| `'host'` \| `'member'` |
+| team_id | uuid | FK → teams.id | Primary team assignment |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
 
 ---
 
 ### meetings
-L10 or Leadership meeting sessions.
+
+L10 or quarterly meeting sessions.
 
 | Column | Type | Constraints | Notes |
-|---|---|---|---|
+|--------|------|-------------|-------|
 | id | uuid | PK | |
-| type | text | NOT NULL | `'l10'` \| `'leadership'` |
-| team_id | uuid | FK → teams.id NOT NULL | |
-| facilitator_id | uuid | FK → users.id | |
-| scheduled_at | timestamptz | NOT NULL | |
-| started_at | timestamptz | | Set when status → `'open'` |
-| closed_at | timestamptz | | Set when status → `'closed'` |
-| status | text | NOT NULL DEFAULT `'scheduled'` | `'scheduled'` \| `'open'` \| `'closed'` |
-| agenda_json | jsonb | | Segment order + target durations |
-| notes | text | | Facilitator notes |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
-
-**Business rule:** Cannot transition to `'closed'` while any linked issue has status `'open'` or `'ids_in_progress'`.
-
----
-
-### issues
-IDS (Identify, Discuss, Solve) items. Can be created standalone or linked to a meeting.
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| id | uuid | PK | |
-| meeting_id | uuid | FK → meetings.id NULLABLE | Null = standalone issue |
-| team_id | uuid | FK → teams.id NOT NULL | |
-| owner_id | uuid | FK → users.id NOT NULL | |
-| title | text | NOT NULL | |
-| description | text | | |
-| status | text | NOT NULL DEFAULT `'open'` | `'open'` \| `'ids_in_progress'` \| `'resolved'` \| `'dropped'` |
-| resolution_notes | text | | **Min 50 chars** when status = `'resolved'` |
-| priority | text | | `'low'` \| `'medium'` \| `'high'` |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
-| resolved_at | timestamptz | | Set when status → `'resolved'` |
-
-**Business rule:** `resolution_notes` must be ≥ 50 characters before status can be set to `'resolved'`. Enforced at domain layer — returns HTTP 400 if violated.
-
----
-
-### rocks
-Quarterly goals (Rocks) assigned to individuals or teams.
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| id | uuid | PK | |
-| owner_id | uuid | FK → users.id NOT NULL | |
-| team_id | uuid | FK → teams.id NOT NULL | |
-| title | text | NOT NULL | |
-| description | text | | |
-| quarter | text | NOT NULL | Format: `'Q2-2025'` |
-| status | text | NOT NULL DEFAULT `'on_track'` | `'on_track'` \| `'off_track'` \| `'complete'` \| `'dropped'` |
-| due_date | date | NOT NULL | End of quarter |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
-
----
-
-### rock_status_history
-Append-only audit log of every rock status change. Never updated or deleted.
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| id | uuid | PK | |
-| rock_id | uuid | FK → rocks.id NOT NULL | |
-| changed_by | uuid | FK → users.id NOT NULL | |
-| previous_status | text | NOT NULL | |
-| new_status | text | NOT NULL | |
-| note | text | | Optional context for the change |
-| changed_at | timestamptz | NOT NULL DEFAULT now() | |
-
-**Constraint:** INSERT only — no UPDATE or DELETE ever permitted on this table.
-
----
-
-### todos
-Action items created during or outside of meetings.
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| id | uuid | PK | |
-| meeting_id | uuid | FK → meetings.id NULLABLE | Null = standalone to-do |
-| owner_id | uuid | FK → users.id NOT NULL | |
-| title | text | NOT NULL | |
-| due_date | date | | |
-| status | text | NOT NULL DEFAULT `'open'` | `'open'` \| `'complete'` \| `'dropped'` |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
-| completed_at | timestamptz | | Set when status → `'complete'` |
+| team_id | uuid | NOT NULL FK → teams.id | |
+| type | text | NOT NULL | `'l10'` \| `'quarterly'` |
+| scheduled_at | timestamp | NOT NULL | |
+| host_id | uuid | FK → users.id | |
+| status | text | NOT NULL DEFAULT `'upcoming'` | `'upcoming'` \| `'live'` \| `'pending_close'` \| `'closed'` |
+| fathom_url | text | nullable | Link to Fathom recording/summary |
+| meeting_rating_avg | real | nullable | Average of end-of-meeting ratings |
+| summary_sent_at | timestamp | nullable | When post-meeting summary was sent |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
 
 ---
 
 ### checkins
-Weekly scorecard/headline data submitted before or during a meeting.
+
+Pre-meeting personal and professional good-news submissions.
 
 | Column | Type | Constraints | Notes |
-|---|---|---|---|
+|--------|------|-------------|-------|
 | id | uuid | PK | |
-| meeting_id | uuid | FK → meetings.id NOT NULL | |
-| user_id | uuid | FK → users.id NOT NULL | |
-| headline | text | | One personal headline |
-| scorecard_data | jsonb | | Key metric values `{ metricKey: value }` |
-| submitted_at | timestamptz | NOT NULL DEFAULT now() | Immutable after set |
-
-**Unique:** `(meeting_id, user_id)` — one check-in per person per meeting.
+| member_id | uuid | NOT NULL FK → users.id | |
+| meeting_id | uuid | NOT NULL FK → meetings.id | |
+| personal_good_news | text | nullable | |
+| professional_good_news | text | nullable | |
+| submitted_at | timestamp | NOT NULL DEFAULT now() | Immutable after set |
 
 ---
 
 ### headlines
-Good-news / win headlines shared at the start of a meeting.
+
+Structured headlines submitted during a meeting (wins, news, alerts).
 
 | Column | Type | Constraints | Notes |
-|---|---|---|---|
+|--------|------|-------------|-------|
 | id | uuid | PK | |
-| meeting_id | uuid | FK → meetings.id NOT NULL | |
-| user_id | uuid | FK → users.id NOT NULL | |
-| text | text | NOT NULL | |
-| created_at | timestamptz | NOT NULL DEFAULT now() | |
+| submitter_id | uuid | NOT NULL FK → users.id | |
+| meeting_id | uuid | NOT NULL FK → meetings.id | |
+| category | text | NOT NULL | `'absence'` \| `'headcount'` \| `'closed_won'` \| `'cancellation'` \| `'general'` |
+| content | text | NOT NULL | |
+| escalated_to_ids | boolean | NOT NULL DEFAULT false | Whether escalated to IDS queue |
+| submitted_at | timestamp | NOT NULL DEFAULT now() | |
+
+---
+
+### rocks
+
+Quarterly goals assigned at company, department, or individual level.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | uuid | PK | |
+| title | text | NOT NULL | |
+| team_id | uuid | NOT NULL FK → teams.id | |
+| level | text | NOT NULL | `'company'` \| `'dept'` \| `'individual'` |
+| owner_id | uuid | NOT NULL FK → users.id | |
+| quarter | integer | NOT NULL | 1–4 |
+| year | integer | NOT NULL | e.g. 2025 |
+| parent_rock_id | uuid | nullable self-ref FK → rocks.id | For dept/individual rocks under a company rock |
+| status | text | NOT NULL DEFAULT `'on_track'` | `'on_track'` \| `'off_track'` \| `'at_risk'` \| `'blocked'` \| `'on_hold'` \| `'completed'` |
+| clickup_task_id | text | nullable | For ClickUp migration reference |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
+| updated_at | timestamp | NOT NULL DEFAULT now() | |
+
+---
+
+### rock_status_history
+
+Append-only audit log of every rock status change.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | uuid | PK | |
+| rock_id | uuid | NOT NULL FK → rocks.id | |
+| meeting_id | uuid | nullable FK → meetings.id | Meeting in which status was updated |
+| status | text | NOT NULL | The new status value |
+| comment | text | nullable | Context for the change |
+| changed_by_id | uuid | NOT NULL FK → users.id | |
+| changed_at | timestamp | NOT NULL DEFAULT now() | |
+
+**Constraint:** INSERT only — no UPDATE or DELETE ever permitted.
+
+---
+
+### issues
+
+IDS items raised within or outside a meeting. Supports escalation to leadership.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | uuid | PK | |
+| title | text | NOT NULL | |
+| description | text | nullable | |
+| submitter_id | uuid | NOT NULL FK → users.id | |
+| source_team_id | uuid | NOT NULL FK → teams.id | Team that raised the issue |
+| target_dept_id | uuid | NOT NULL FK → teams.id | Department responsible for resolution |
+| priority | text | NOT NULL DEFAULT `'medium'` | `'low'` \| `'medium'` \| `'high'` \| `'critical'` |
+| status | text | NOT NULL DEFAULT `'open'` | `'open'` \| `'assigned'` \| `'in_progress'` \| `'pending_closure'` \| `'closed'` |
+| assigned_to_id | uuid | nullable FK → users.id | |
+| meeting_id | uuid | nullable FK → meetings.id | Meeting in which issue was raised |
+| escalate_to_leadership | boolean | NOT NULL DEFAULT false | Flagged for leadership review |
+| resolution_notes | text | nullable | Required (≥ 50 chars) before status → `'closed'` |
+| sop_link | text | nullable | Link to SOP if resolution created one |
+| is_fathom_source | boolean | NOT NULL DEFAULT false | True if auto-detected from Fathom summary |
+| clickup_task_id | text | nullable | ClickUp migration reference |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
+| updated_at | timestamp | NOT NULL DEFAULT now() | |
+
+**Business rule:** `resolution_notes` ≥ 50 characters enforced at domain layer before status → `'closed'`.
+
+---
+
+### todos
+
+Action items created in meetings or standalone. Supports carry-over tracking.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| id | uuid | PK | |
+| title | text | NOT NULL | |
+| assigned_to_id | uuid | NOT NULL FK → users.id | |
+| team_id | uuid | NOT NULL FK → teams.id | |
+| meeting_id | uuid | nullable FK → meetings.id | Meeting in which to-do was created |
+| due_date | date | nullable | |
+| status | text | NOT NULL DEFAULT `'open'` | `'open'` \| `'done'` \| `'blocked'` \| `'carried'` |
+| carry_over_reason | text | nullable | Required when status → `'carried'` |
+| linked_rock_id | uuid | nullable FK → rocks.id | Rock this to-do supports |
+| acknowledged_at | timestamp | nullable | When owner acknowledged the to-do |
+| clickup_task_id | text | nullable | ClickUp migration reference |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
+| updated_at | timestamp | NOT NULL DEFAULT now() | |
 
 ---
 
 ### vto
-Vision/Traction Organizer — the company-level strategic document. One active version at a time; previous versions are retained by incrementing `version`.
+
+Vision/Traction Organizer — company-level strategic document. Versioned; prior versions retained.
 
 | Column | Type | Constraints | Notes |
-|---|---|---|---|
+|--------|------|-------------|-------|
 | id | uuid | PK | |
-| version | integer | NOT NULL | Auto-incremented on each save |
-| core_values | jsonb | | `string[]` |
-| core_focus | jsonb | | `{ purpose: string, niche: string }` |
-| bhag | text | | 10-year Big Hairy Audacious Goal |
-| marketing_strategy | jsonb | | Target market, uniques, proven process, guarantee |
-| three_year_picture | jsonb | | Revenue, profit, measurables, what it looks like |
-| one_year_plan | jsonb | | Revenue, profit, measurables, goals `string[]` |
-| rocks_q | jsonb | | Current quarter company rocks `string[]` |
-| issues_list | jsonb | | Long-term issues parking lot `string[]` |
-| updated_by | uuid | FK → users.id | |
-| updated_at | timestamptz | NOT NULL DEFAULT now() | |
+| version | integer | NOT NULL DEFAULT 1 | Incremented on each save |
+| core_values | jsonb | nullable | `string[]` |
+| core_focus | jsonb | nullable | `{ purpose: string, niche: string }` |
+| ten_year_target | text | nullable | Big Hairy Audacious Goal |
+| three_year_picture | jsonb | nullable | Revenue, profit, measurables |
+| one_year_plan | jsonb | nullable | Goals, revenue, profit targets |
+| marketing_strategy | jsonb | nullable | Target market, guarantees, etc. |
+| three_uniques | jsonb | nullable | `string[]` — the 3 competitive differentiators |
+| proven_process | jsonb | nullable | Steps of the MSPBots delivery process |
+| last_reviewed_at | timestamp | nullable | |
+| reviewed_by_id | uuid | nullable FK → users.id | |
+| leadership_session_id | uuid | nullable FK → meetings.id | Quarterly meeting where reviewed |
+| created_at | timestamp | NOT NULL DEFAULT now() | |
 
 ---
 
 ## Status State Machines
 
-### Meeting status
+### Meeting
 ```
-scheduled → open → closed
-```
-- `open`: requires no prior open sessions for the same team on same date
-- `closed`: blocked if any linked issue is `open` or `ids_in_progress`
-
-### Issue status
-```
-open → ids_in_progress → resolved
-              ↓
-           dropped
-```
-- `resolved`: requires `resolution_notes` ≥ 50 chars
-
-### Rock status
-```
-on_track ⇄ off_track → complete
-              ↓
-           dropped
-```
-- Every transition writes to `rock_status_history`
-
-### Todo status
-```
-open → complete
-  ↓
-dropped
+upcoming → live → pending_close → closed
 ```
 
-## Indexes (planned)
+### Rock
+```
+on_track ⇄ off_track ⇄ at_risk ⇄ blocked ⇄ on_hold → completed
+```
+Every transition appends a row to `rock_status_history`.
 
-| Table | Index columns | Reason |
-|---|---|---|
-| meetings | `(team_id, status)` | Filter open meetings by team |
+### Issue
+```
+open → assigned → in_progress → pending_closure → closed
+                                                 ↑
+                          resolution_notes ≥ 50 chars required
+```
+
+### Todo
+```
+open → done
+open → blocked
+open → carried  (requires carry_over_reason)
+```
+
+---
+
+## Key Constraints Summary
+
+| Rule | Enforcement |
+|------|-------------|
+| `issues.resolution_notes` ≥ 50 chars before `'closed'` | Domain layer — HTTP 400 if violated |
+| `rock_status_history` is append-only | No UPDATE/DELETE in any domain function |
+| All tables in `pgSchema(APP_ID)` | Defined in `schema.ts`; never `public` |
+| `todos.carry_over_reason` required when `status = 'carried'` | Domain layer validation |
+| `meetings` cannot close with open issues | Domain layer guard — HTTP 409 with blocking IDs |
+
+---
+
+## Planned Indexes
+
+| Table | Columns | Reason |
+|-------|---------|--------|
+| meetings | `(team_id, status)` | Filter open/live meetings by team |
 | meetings | `(scheduled_at)` | Date-range queries |
-| issues | `(meeting_id, status)` | Meeting close guard check |
-| issues | `(owner_id, status)` | Nudge queries |
-| rocks | `(owner_id, quarter)` | Rock review segment |
-| rocks | `(team_id, quarter, status)` | Team rock dashboard |
-| todos | `(owner_id, status, due_date)` | Nudge queries + overdue list |
+| issues | `(meeting_id, status)` | Meeting close guard |
+| issues | `(assigned_to_id, status)` | Nudge queries |
+| rocks | `(owner_id, quarter, year)` | Rock review segment |
+| rocks | `(team_id, quarter, year, status)` | Team rock dashboard |
+| todos | `(assigned_to_id, status, due_date)` | Nudge + overdue queries |
 | rock_status_history | `(rock_id, changed_at)` | History timeline |

@@ -1,7 +1,7 @@
 {
   "name": "app-eos-pulse",
   "version": "0.1.0",
-  "description": "MSPBots React full-stack template with modern UI components and micro-frontend support",
+  "description": "MSPBots React full-stack template with modern UI components",
   "type": "module",
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -11,41 +11,70 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.1.3",
     "jose": "^6.1.3",
-    "@mspbots/ui": "221.0.0",
-    "@mspbots/fetch": "222.0.0",
+    "@mspbots/ui": "224.0.0",
+    "@mspbots/fetch": "225.0.0",
     "@mspbots/bridge": "222.0.0",
-    "@mspbots/layout": "222.0.0"
+    "@mspbots/layout": "225.0.0",
+    "userpilot": "^1.4.2",
+    "mspack": "226.0.0"
   },
   "devDependencies": {
     "@types/deno": "^2.5.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "@tailwindcss/typography": "0.5.19",
+    "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/container-queries": "0.1.1",
     "autoprefixer": "10.4.23",
     "esbuild": "0.27.2",
     "postcss": "8.5.6",
-    "tailwindcss": "3.4.19",
-    "tailwindcss-animate": "1.0.7",
+    "tailwindcss": "^4.2.2",
+    "tailwindcss-animate": "^1.0.7",
     "tw-animate-css": "1.4.0",
     "typescript": "5.9.3",
-    "@mspbots/type": "221.0.0",
-    "@mspbots/react": "221.0.0",
-    "@mspbots/tsconfig": "220.0.0",
-    "@mspbots/routes": "224.0.0"
+    "@mspbots/type": "224.0.0",
+    "@mspbots/react": "303.0.0",
+    "@mspbots/tsconfig": "223.0.0",
+    "@mspbots/routes": "227.0.0",
+    "@tailwindcss/vite": "^4.2.2"
   },
   "manifest": {
     "icon": "📦",
     "hasBackend": true,
-    "permissions": {},
     "version": "0.1.0",
-    "name": "app-eos-pulse",
-    "id": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna"
+    "id": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+    "permissions": {
+      "net": ["20.241.40.252:15432"],
+      "env": true,
+      "imports": ["drizzle-orm", "drizzle-orm/pg-core", "drizzle-orm/postgres-js", "postgres", "drizzle-kit"],
+      "db": {
+        "user": "user_m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+        "password": "pass_m4mom3q0m8bw2p9w93urcjeb9x2y4dna"
+      }
+    },
+    "name": "app-eos-pulse"
   },
   "scripts": {
     "predev": "cd service && deno install",
     "dev": "mspack dev",
     "build": "mspack build"
+  },
+  "keywords": [
+    "mspbots",
+    "template",
+    "react",
+    "fullstack",
+    "typescript"
+  ],
+  "license": "MIT",
+  "files": [
+    "**/*",
+    "!node_modules",
+    "!dist",
+    "!storage"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.mspbots.ai/",
+    "access": "public"
   }
 }
