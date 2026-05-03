@@ -1,7 +1,7 @@
 # EOS Pulse — Quality Score
 
-> Last updated: 2026-04-24
-> Project phase: **Scaffolding** — no feature code exists yet
+> Last updated: 2026-04-29
+> Project phase: **Step 04 → 05** — DB provisioned; users/teams domain live
 
 ---
 
@@ -27,7 +27,7 @@
 | todos | **F** | Scaffolding only | No implementation |
 | nudges | **F** | Scaffolding only | Teams integration not configured; no schedule |
 | checkins | **F** | Not extracted | Folded into meetings domain conceptually — not built |
-| auth / users | **F** | Not started | Delegating to MSPBots platform auth — not wired |
+| users / teams | **C** | Domain + handler live | Real DB queries; CRUD endpoints wired; seed endpoint; TeamsPage UI |
 | VTO | **F** | Not started | Domain and handler not scaffolded |
 
 ---
@@ -36,8 +36,8 @@
 
 | Area | Grade | Status | Notes |
 |---|---|---|---|
-| DB schema (Drizzle) | **F** | Placeholder `schema.ts` | Tables defined in data-model.md; not yet in code |
-| DB singleton (`db.ts`) | **F** | Placeholder `db.ts` | `DATABASE_URL` env var required; not yet connected |
+| DB schema (Drizzle) | **B** | `schema.ts` complete; migration applied | 10 tables in `pgSchema(APP_ID)`; snapshot + journal committed |
+| DB singleton (`db.ts`) | **B** | Live | Direct config, env fallbacks, `max: 10` pool |
 | Architecture enforcement | **C** | `scripts/lint-arch.ts` exists | Not wired to CI pipeline yet |
 | API contracts | **D** | Placeholder files created | Endpoint shapes documented; not yet implemented |
 | Integration specs | **D** | Placeholder files created | Specs documented; zero integration code written |
@@ -53,8 +53,8 @@
 |---|---|---|
 | 1 | IDS close guard (50-char resolution notes) | Non-negotiable product rule violated |
 | 2 | Meeting close guard (open issues block) | Non-negotiable product rule violated |
-| 3 | Drizzle schema + migrations | Nothing can be stored |
-| 4 | Auth middleware | All routes unprotected |
+| 3 | Auth middleware | All routes unprotected |
+| 4 | Remove `/api/seed` before v1 | Unauthenticated data manipulation in prod |
 | 5 | Nudge cron scheduler | Accountability feature completely absent |
 | 6 | Teams webhook integration | Nudges cannot be delivered |
 | 7 | Rock status history writes | Audit trail missing |
