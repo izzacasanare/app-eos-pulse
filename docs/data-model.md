@@ -81,7 +81,7 @@ Pre-meeting personal and professional good-news submissions.
 | meeting_id | uuid | NOT NULL FK → meetings.id | |
 | personal_good_news | text | nullable | |
 | professional_good_news | text | nullable | |
-| submitted_at | timestamp | NOT NULL DEFAULT now() | Immutable after set |
+| submitted_at | timestamp | NOT NULL DEFAULT now() | Refreshed on re-submit (one row per `(member_id, meeting_id)`) |
 
 ---
 
@@ -225,6 +225,9 @@ upcoming → live → pending_close → closed
 on_track ⇄ off_track ⇄ at_risk ⇄ blocked ⇄ on_hold → completed
 ```
 Every transition appends a row to `rock_status_history`.
+A non-empty `comment` is required when the new status is `off_track` or
+`blocked` — `service/domain/rocks.domain.ts:updateRockStatus` throws
+`CommentRequiredError`, which the handler maps to HTTP 400.
 
 ### Issue
 ```
@@ -239,6 +242,10 @@ open → done
 open → blocked
 open → carried  (requires carry_over_reason)
 ```
+The pre-meeting flow (`POST /api/todos/:id/status`) writes the supplied
+`reason` into `carry_over_reason` for `blocked`/`carried`, clears it on `done`,
+and refreshes `updated_at` so `getMeetingTodos` can flag stale rows
+(`updated_at < meeting.scheduled_at - 1h` ⇒ `notUpdated: true`).
 
 ---
 

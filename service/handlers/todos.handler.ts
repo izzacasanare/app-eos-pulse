@@ -20,8 +20,14 @@ import {
   completeTodo,
   dropTodo,
   deleteTodo,
+  updateTodoStatus,
+  getMeetingTodos,
+  InvalidTodoStatusError,
+  MeetingNotFoundError,
   TodoAlreadyClosedError,
+  TodoNotFoundError,
 } from "../domain/todos.domain.ts";
+import type { TodoStatus } from "../domain/todos.domain.ts";
 
 export const todosHandler = {
 
@@ -57,6 +63,49 @@ export const todosHandler = {
     const todo = await updateTodo(params.params.id, patch);
     if (!todo) return { error: "NOT_FOUND", message: "Todo not found" };
     return { todo };
+  },
+
+  async "POST /api/todos/:id/status"(params: HandlerParams) {
+    const body = params.body as {
+      status:  string;
+      reason?: string;
+      userId?: string;
+    };
+    const userId = body.userId ?? (params.user?.["id"] as string | undefined);
+    if (!userId) {
+      return { status: 400, error: "VALIDATION_ERROR", message: "userId is required" };
+    }
+    if (!body.status) {
+      return { status: 400, error: "VALIDATION_ERROR", message: "status is required" };
+    }
+    try {
+      const todo = await updateTodoStatus(params.params.id, {
+        status: body.status as TodoStatus,
+        reason: body.reason,
+        userId,
+      });
+      return { todo };
+    } catch (err) {
+      if (err instanceof InvalidTodoStatusError) {
+        return { status: 400, error: "INVALID_STATUS", message: err.message };
+      }
+      if (err instanceof TodoNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  async "GET /api/meetings/:id/todos"(params: HandlerParams) {
+    try {
+      const items = await getMeetingTodos(params.params.id);
+      return { items, total: items.length };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { error: "NOT_FOUND", message: err.message };
+      }
+      throw err;
+    }
   },
 
   async "POST /api/todos/:id/complete"(params: HandlerParams) {

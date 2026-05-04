@@ -1,97 +1,152 @@
 # Integration — ClickUp Sync
 
-> Status: **Placeholder** — not implemented in v1
+> Status: **Implemented** — `service/domain/clickup-sync.domain.ts`
+> Migration phase: sync is one-way (EOS Pulse → ClickUp) during transition period.
 
 ---
 
 ## Purpose
 
-EOS Pulse replaces ClickUp as the EOS operating layer. This integration supports a **one-time migration** of existing ClickUp data (rocks, issues, to-dos) into EOS Pulse during the transition period.
+EOS Pulse is replacing ClickUp as the EOS operating layer. During the transition, changes to **issues**, **rocks**, and **to-dos** in EOS Pulse are mirrored to ClickUp so that teams not yet fully cut over can continue to work from ClickUp without data diverging.
 
-This is a **migration tool only** — not a live two-way sync. Once migration is complete, ClickUp is no longer the source of truth.
-
----
-
-## Scope
-
-### In scope (migration)
-- Import open Rocks from ClickUp tasks tagged as rocks → `rocks` table
-- Import open Issues from ClickUp tasks tagged as issues → `issues` table
-- Import open To-dos from ClickUp tasks → `todos` table
-- Map ClickUp assignees to EOS Pulse users by email
-
-### Out of scope
-- Live bi-directional sync
-- Importing historical meeting notes
-- Importing closed/completed tasks (migration covers open items only)
-- Attachments, comments, custom fields beyond core fields
+This is **not** a live two-way sync — ClickUp is read-only from EOS Pulse's perspective.
+Once migration is complete, disable all sync toggles via the Sync Settings page and archive the ClickUp lists.
 
 ---
 
-## Required Environment Variables
+## Architecture
 
-```env
-CLICKUP_API_TOKEN=pk_...
-CLICKUP_WORKSPACE_ID=...
-CLICKUP_ROCKS_LIST_ID=...
-CLICKUP_ISSUES_LIST_ID=...
-CLICKUP_TODOS_LIST_ID=...
 ```
+EOS Pulse Domain Layer
+  └── clickup-sync.domain.ts
+        ├── reads settings (API key, list IDs, toggles) from settings.domain.ts
+        └── calls ClickUp API v2 via native fetch()
+              ├── syncIssueToClickUp(issue)
+              ├── syncRockToClickUp(rock)
+              ├── syncTodoToClickUp(todo)
+              ├── pullClickUpStatus(clickupTaskId)
+              └── testClickUpConnection()
+
+HTTP layer
+  └── settings.handler.ts
+        └── POST /api/settings/test-clickup  → testClickUpConnection()
+
+UI
+  └── pages/Admin/SyncSettingsPage.tsx
+```
+
+**Intentional architecture exception:** `clickup-sync.domain.ts` uses native `fetch()` for outbound ClickUp API calls. This is the only domain file permitted to use `fetch()`. All other domain files must not call `fetch()` (lint-arch RULE_4 applies to `pages/` only).
 
 ---
 
-## Migration Flow
+## Configuration
 
-```
-1. Authenticate with ClickUp API v2
-2. Fetch tasks from configured list IDs
-3. Map ClickUp task → EOS Pulse entity:
-   - name          → title
-   - description   → description
-   - assignee.email → ownerId (lookup by email)
-   - due_date       → dueDate
-   - status         → map to EOS status (see mapping below)
-4. Insert into EOS Pulse DB via domain layer
-5. Write migration log (clickup_id → eos_pulse_id mapping)
-6. Report: N imported, M skipped (no matching user), K errors
-```
+All settings are stored in the `settings` DB table and managed via the Sync Settings page (`/admin/sync-settings`) or `PUT /api/settings`.
 
-### Status Mapping
-
-| ClickUp status | EOS Pulse status |
+| Setting key | Description |
 |---|---|
-| `open` / `in progress` | `open` |
-| `in review` | `ids_in_progress` (issues) / `on_track` (rocks) |
-| `complete` | Skipped (migration imports open items only) |
-| `closed` | Skipped |
+| `CLICKUP_API_KEY` | Personal API token (`pk_...`). Masked in GET responses. |
+| `CLICKUP_IDS_LIST_ID` | ClickUp list ID for Issues/IDS tasks. |
+| `CLICKUP_ROCKS_LIST_ID` | ClickUp list ID for Rocks. |
+| `CLICKUP_TODOS_LIST_ID` | ClickUp list ID for To-dos. |
+| `IDS_SYNC_ENABLED` | `"true"` / `"false"` — toggle issues sync. |
+| `ROCKS_SYNC_ENABLED` | `"true"` / `"false"` — toggle rocks sync. |
+| `TODOS_SYNC_ENABLED` | `"true"` / `"false"` — toggle to-dos sync. |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams incoming webhook URL (for nudges). |
 
 ---
 
-## Migration Script
+## Sync Behavior
 
-To be created at: `scripts/migrate-from-clickup.ts`
+### Create or update
 
-Run once:
-```bash
-deno run --allow-env --allow-net scripts/migrate-from-clickup.ts
+Each sync function checks the record's `clickup_task_id` column:
+
+- **null** → creates a new ClickUp task in the configured list → writes the returned `id` back to the EOS Pulse record
+- **set** → updates the existing ClickUp task via `PUT /task/{id}`
+
+### Status mapping
+
+**Issues → ClickUp**
+
+| EOS Pulse status | ClickUp status |
+|---|---|
+| `open` | `to do` |
+| `assigned` | `to do` |
+| `in_progress` | `in progress` |
+| `pending_closure` | `in review` |
+| `closed` | `complete` |
+
+**Rocks → ClickUp**
+
+| EOS Pulse status | ClickUp status |
+|---|---|
+| `on_track` | `in progress` |
+| `off_track` | `in progress` |
+| `at_risk` | `in review` |
+| `blocked` | `blocked` |
+| `on_hold` | `on hold` |
+| `completed` | `complete` |
+
+**To-dos → ClickUp**
+
+| EOS Pulse status | ClickUp status |
+|---|---|
+| `open` | `to do` |
+| `done` | `complete` |
+| `blocked` | `blocked` |
+| `carried` | `to do` |
+
+### Priority mapping (Issues only)
+
+| EOS Pulse priority | ClickUp priority number |
+|---|---|
+| `critical` | 1 (urgent) |
+| `high` | 2 |
+| `medium` | 3 |
+| `low` | 4 |
+
+---
+
+## Sync is not automatic
+
+Sync functions are **not** called automatically on every domain write — they must be called explicitly by a handler or background job. This keeps domain mutations fast and decoupled from ClickUp availability.
+
+**Recommended trigger points** (to implement in Step 07+):
+- Issue created/status changed → `syncIssueToClickUp`
+- Rock status changed → `syncRockToClickUp`
+- Todo created/completed/carried → `syncTodoToClickUp`
+
+---
+
+## Testing the connection
+
+```
+POST /api/settings/test-clickup
 ```
 
-Idempotent: tracks already-migrated ClickUp IDs in a local log file to prevent double-import.
+Returns `{ ok: true }` or `{ ok: false, error: "..." }`.
+Uses `GET /api/v2/team` — a lightweight authenticated ClickUp endpoint.
 
 ---
 
-## API Reference
+## ClickUp API reference
 
-- ClickUp API v2: `https://api.clickup.com/api/v2`
-- Auth: `Authorization: {CLICKUP_API_TOKEN}` header
+- Base URL: `https://api.clickup.com/api/v2`
+- Auth header: `Authorization: {CLICKUP_API_KEY}` (no `Bearer` prefix)
+- Create task: `POST /list/{listId}/task`
+- Update task: `PUT /task/{taskId}`
+- Get task: `GET /task/{taskId}`
 - Rate limit: 100 requests/min per token
 
 ---
 
-## Decision Log
+## Disabling sync (post-migration)
 
-| Decision | Reason |
-|---|---|
-| Migration only, no live sync | Simplicity; EOS Pulse is the new source of truth |
-| Import open items only | Closed items are historical; no value in cluttering new system |
-| Map by email | Most reliable identifier between systems |
+1. Open Sync Settings page
+2. Toggle off: IDS sync, Rocks sync, To-dos sync
+3. Save
+4. Archive the ClickUp lists (do not delete — keep as historical record)
+5. Remove `CLICKUP_*` values from the settings table
+
+At this point EOS Pulse is the sole source of truth.

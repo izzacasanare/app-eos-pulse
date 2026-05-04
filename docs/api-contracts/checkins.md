@@ -1,6 +1,6 @@
 # API Contract — Check-ins
 
-> Status: **Placeholder** — shapes defined here; implementation pending
+> Status: **Implemented (pre-meeting submission module)**
 
 ---
 
@@ -8,19 +8,26 @@
 
 ```typescript
 interface Checkin {
-  id:            string
-  meetingId:     string
-  userId:        string
-  headline:      string | null      // personal good-news headline
-  scorecardData: Record<string, number | string | null>  // { metricKey: value }
-  submittedAt:   string             // immutable after set
+  id:                   string
+  memberId:             string
+  meetingId:            string
+  personalGoodNews:     string | null
+  professionalGoodNews: string | null
+  submittedAt:          string             // ISO timestamp
 }
 
-interface CheckinStatus {
-  userId:      string
-  userName:    string
-  submitted:   boolean
-  submittedAt: string | null
+interface MissingMember {
+  id:    string
+  name:  string
+  email: string
+}
+
+interface MeetingCheckinsResult {
+  meetingId:      string
+  submitted:      Checkin[]
+  missingMembers: MissingMember[]
+  totalExpected:  number
+  submittedCount: number
 }
 ```
 
@@ -28,67 +35,49 @@ interface CheckinStatus {
 
 ## Business Rules
 
-1. **One per person per meeting:** Unique constraint on `(meetingId, userId)`. Submitting again returns the existing check-in (idempotent).
-2. **Immutable after submission:** `submittedAt` is set on first submit. The check-in record cannot be updated after that.
-3. **Scorecard data is untyped at the API layer** — the shape of `scorecardData` is defined by team configuration (out of scope for v1).
+1. **One check-in per `(memberId, meetingId)`** — re-submitting updates the
+   existing row in place and refreshes `submittedAt`.
+2. **`submittedAt` is server-controlled** — never accepted from the client.
+3. **Missing members** are derived from `users.teamId === meeting.teamId`
+   minus the set of users who have already submitted.
 
 ---
 
 ## Endpoints
 
-### `GET /api/meetings/:meetingId/checkins`
+### `POST /api/meetings/:id/checkin`
 
-Get all check-ins for a meeting, including pending (not yet submitted) participants.
-
-**Response `200`:**
-```json
-{
-  "submitted": [Checkin],
-  "pending":   [{ "userId": "uuid", "userName": "string" }],
-  "total":     10,
-  "submittedCount": 7
-}
-```
-
----
-
-### `GET /api/meetings/:meetingId/checkins/:userId`
-
-Get a specific user's check-in for a meeting.
-
-**Response `200`:** `{ "checkin": Checkin }`
-
-**Response `404`:** Not submitted yet.
-
----
-
-### `POST /api/meetings/:meetingId/checkins`
-
-Submit a check-in. Can only submit for the currently authenticated user (or admin submitting on behalf).
+Submit (or re-submit) a check-in for the current user.
 
 **Body:**
 ```json
 {
-  "headline":      "string (optional)",
-  "scorecardData": { "metricKey": 42 }
+  "memberId":             "uuid (optional — defaults to authenticated user)",
+  "personalGoodNews":     "string | null",
+  "professionalGoodNews": "string | null"
 }
 ```
 
-**Response `201`:** `{ "checkin": Checkin }`
+**Response `200`:** `{ "checkin": Checkin }`
 
-**Response `409`:** Check-in already submitted for this meeting.
+**Response `400`:** `VALIDATION_ERROR` — `memberId` could not be resolved.
 
 ---
 
-### `GET /api/meetings/:meetingId/checkins/status`
+### `GET /api/meetings/:id/checkins`
 
-Summary of who has and hasn't submitted for a meeting — used by the facilitator pre-meeting view.
+Get all check-ins for a meeting, with the list of members who have **not**
+submitted.
 
 **Response `200`:**
 ```json
 {
-  "statuses": [CheckinStatus],
-  "submittedCount": 7,
-  "totalExpected":  10
+  "meetingId":      "uuid",
+  "submitted":      [Checkin],
+  "missingMembers": [MissingMember],
+  "totalExpected":  10,
+  "submittedCount": 7
 }
 ```
+
+**Response `404`:** Meeting not found.

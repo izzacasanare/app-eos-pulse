@@ -17,13 +17,19 @@ import { issuesHandler } from "./handlers/issues.handler.ts";
 import { rocksHandler } from "./handlers/rocks.handler.ts";
 import { todosHandler } from "./handlers/todos.handler.ts";
 import { usersHandler } from "./handlers/users.handler.ts";
+import { settingsHandler } from "./handlers/settings.handler.ts";
+import { checkinsHandler } from "./handlers/checkins.handler.ts";
+import { headlinesHandler } from "./handlers/headlines.handler.ts";
 
-export default (app: Hono) => {
+export default (_app: Hono) => {
   return {
     ...meetingsHandler,
     ...issuesHandler,
     ...rocksHandler,
     ...todosHandler,
     ...usersHandler,
+    ...settingsHandler,
+    ...checkinsHandler,
+    ...headlinesHandler,
   };
 };

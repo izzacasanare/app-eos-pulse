@@ -1,23 +1,32 @@
 # API Contract — Todos
 
-> Status: **Placeholder** — shapes defined here; implementation pending
+> Status: **Partially Implemented** — pre-meeting status update flow live; CRUD still stubbed.
 
 ---
 
 ## Types
 
 ```typescript
-type TodoStatus = 'open' | 'complete' | 'dropped'
+type TodoStatus = 'open' | 'done' | 'blocked' | 'carried'
 
 interface Todo {
-  id:          string
-  meetingId:   string | null   // null = standalone to-do
-  ownerId:     string
-  title:       string
-  dueDate:     string | null   // ISO date: 'YYYY-MM-DD'
-  status:      TodoStatus
-  createdAt:   string
-  completedAt: string | null   // set when status → 'complete'
+  id:               string
+  title:            string
+  assignedToId:     string
+  teamId:           string
+  meetingId:        string | null
+  dueDate:          string | null   // 'YYYY-MM-DD'
+  status:           TodoStatus
+  carryOverReason:  string | null
+  acknowledgedAt:   string | null
+  linkedRockId:     string | null
+  createdAt:        string
+  updatedAt:        string
+}
+
+interface MeetingTodoRow {
+  todo:       Todo
+  notUpdated: boolean   // true when updatedAt < (meeting.scheduledAt - 1h)
 }
 ```
 
@@ -25,104 +34,59 @@ interface Todo {
 
 ## Business Rules
 
-1. **Owner required:** `ownerId` cannot be null.
-2. `completedAt` is set automatically by the server when status transitions to `'complete'` — not accepted from client.
-3. To-dos created in a meeting are displayed in the to-do review segment of that meeting's L10.
-4. Overdue to-dos (past `dueDate`, still `open`) are included in nudge queries.
+1. **`assignedToId` cannot be null.**
+2. **`updatedAt` is the freshness signal** for pre-meeting prep: if a todo's
+   `updatedAt` is older than `meeting.scheduledAt - 1 hour`,
+   `getMeetingTodos` flags it as `notUpdated: true`.
+3. **`carryOverReason`** is the free-text slot for non-completion explanations.
+   `updateTodoStatus` writes the `reason` field there for `blocked`/`carried`
+   transitions, and clears it on `done`.
+4. **`acknowledgedAt`** is set whenever the status is changed to anything
+   other than `open` — it captures the moment the owner confirmed the new state.
 
 ---
 
 ## Endpoints
 
-### `GET /api/todos`
+### `POST /api/todos/:id/status`
 
-List to-dos. Paginated.
-
-**Query params:**
-| Param | Type | Description |
-|---|---|---|
-| `meetingId` | string | Filter to-dos created in a specific meeting |
-| `ownerId` | string | Filter by owner |
-| `status` | TodoStatus | Filter by status |
-| `overdue` | boolean | If `true`, return only open to-dos past their `dueDate` |
-| `page` | number | Default `1` |
-| `pageSize` | number | Default `50`, max `200` |
-
-**Response `200`:** `{ "items": [Todo], "total": 42 }`
-
----
-
-### `GET /api/todos/:id`
-
-Get a single to-do.
-
-**Response `200`:** `{ "todo": Todo }`
-
-**Response `404`:** Not found.
-
----
-
-### `POST /api/todos`
-
-Create a to-do.
+Update a single todo's status from the pre-meeting flow.
 
 **Body:**
 ```json
 {
-  "title":     "string (required)",
-  "ownerId":   "uuid (required)",
-  "meetingId": "uuid (optional)",
-  "dueDate":   "YYYY-MM-DD (optional)"
-}
-```
-
-**Response `201`:** `{ "todo": Todo }`
-
----
-
-### `PATCH /api/todos/:id`
-
-Update a to-do's title, dueDate, or ownerId.
-
-**Body (all optional):**
-```json
-{
-  "title":   "string",
-  "dueDate": "YYYY-MM-DD",
-  "ownerId": "uuid"
+  "status": "open | done | blocked | carried",
+  "reason": "string (optional)",
+  "userId": "uuid (optional — defaults to authenticated user)"
 }
 ```
 
 **Response `200`:** `{ "todo": Todo }`
+**Response `400`:** `VALIDATION_ERROR` or `INVALID_STATUS`.
+**Response `404`:** Todo not found.
 
 ---
 
-### `POST /api/todos/:id/complete`
+### `GET /api/meetings/:id/todos`
 
-Mark a to-do as complete. Sets `completedAt` to now.
+Pre-meeting view: open / blocked / carried todos for the meeting's team, with
+a `notUpdated` flag for any todo whose owner hasn't refreshed it within 1 hour
+of `meeting.scheduledAt`.
 
-**Body:** none
-
-**Response `200`:** `{ "todo": Todo }`
-
-**Response `409`:** Already complete or dropped.
-
----
-
-### `POST /api/todos/:id/drop`
-
-Mark a to-do as dropped (will not be completed).
-
-**Body:** none
-
-**Response `200`:** `{ "todo": Todo }`
+**Response `200`:** `{ "items": [MeetingTodoRow], "total": 12 }`
+**Response `404`:** Meeting not found.
 
 ---
 
-### `DELETE /api/todos/:id`
+### Other endpoints (stubbed)
 
-Hard delete. Admin only.
+- `GET    /api/todos`
+- `GET    /api/todos/:id`
+- `POST   /api/todos`
+- `PATCH  /api/todos/:id`
+- `POST   /api/todos/:id/complete`
+- `POST   /api/todos/:id/drop`
+- `DELETE /api/todos/:id`
 
-**Response `204`:** No content.
-
-**Response `403`:** Not admin.
+These return placeholder responses today and will be filled in alongside the
+meeting lifecycle work tracked in `docs/specs/`.

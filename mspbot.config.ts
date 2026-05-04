@@ -1,57 +1,37 @@
 import { defineConfig } from 'mspack'
 import react from '@mspbots/react'
-
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   publicDir: 'public',
   plugins: [
     react({
-      strategy: 'default',
-      
-      opt: {
-        minify: true,
-        treeshake: true,
-      },
-      
       system: {
         app: {
-          name: 'MSPBots App',
-          title: 'MSPBots React Template',
-          icon: 'images/logo.svg',
-          favicon: 'favicon.svg',
+          name: 'MSPbots AI',
+          title: 'MSPbots Agent',
         },
         auth: {
-          enabled: false,
-          loginPath: '/apps/mb-platform-user/login',
-          redirect: 'redirect',
-        },
-        theme: {
-          primary: '174.4 68.9% 34.2%',
-          primaryDark: '173.4 72.7% 41.4%',
-          radius: '0.45rem',
+          enabled: true,
+          target: ({ dev }) => {
+            if (dev) {
+              return 'https://agentint.mspbots.ai/apps/mb-platform-user/login'
+            }
+            return '/apps/mb-platform-user/login'
+          },
         },
         layout: {
-          mode: 'vertical',
-          collapsible: true,
-          defaultCollapsed: false,
-
-          header: {
-            enabled:true,
-            title: ({ mode }) => mode === 'production' ? '' : '⚡ DEV',
-          },
-
-          toolbar: {
-            settingsDisabled: true,
-            languageDisabled: true,
-            fullscreenDisabled: true,
-            notificationsDisabled: true,
-        
-            disabledTooltip: '⚡ DEV',
+          sidebar: {
+            showUserMenu: true,
           },
         },
       },
     }),
   ],
+  
+  vite: {
+    plugins: [tailwindcss()],
+  },
   
   server: {
     cors: true,

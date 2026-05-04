@@ -202,6 +202,26 @@ export type Todo    = typeof todos.$inferSelect;
 export type NewTodo = typeof todos.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Key-value store for app configuration.
+ * Keys: CLICKUP_API_KEY, CLICKUP_IDS_LIST_ID, CLICKUP_ROCKS_LIST_ID,
+ *       CLICKUP_TODOS_LIST_ID, IDS_SYNC_ENABLED, ROCKS_SYNC_ENABLED,
+ *       TODOS_SYNC_ENABLED, TEAMS_WEBHOOK_URL
+ */
+export const settings = appSchema.table("settings", {
+  id:        defaultId(),
+  key:       text("key").notNull().unique(),
+  value:     text("value"),
+  updatedAt: updatedAt(),
+});
+
+export type Setting    = typeof settings.$inferSelect;
+export type NewSetting = typeof settings.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // vto
 // ---------------------------------------------------------------------------
 

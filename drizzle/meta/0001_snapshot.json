@@ -1,0 +1,1148 @@
+{
+  "id": "ec206406-0f2e-45d2-8f94-ff79a7bf5976",
+  "prevId": "65616f5c-f918-4262-ab44-3a3edf1c6a08",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.checkins": {
+      "name": "checkins",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meeting_id": {
+          "name": "meeting_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personal_good_news": {
+          "name": "personal_good_news",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "professional_good_news": {
+          "name": "professional_good_news",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "checkins_member_id_users_id_fk": {
+          "name": "checkins_member_id_users_id_fk",
+          "tableFrom": "checkins",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "checkins_meeting_id_meetings_id_fk": {
+          "name": "checkins_meeting_id_meetings_id_fk",
+          "tableFrom": "checkins",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "meeting_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.headlines": {
+      "name": "headlines",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "submitter_id": {
+          "name": "submitter_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meeting_id": {
+          "name": "meeting_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "escalated_to_ids": {
+          "name": "escalated_to_ids",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "headlines_submitter_id_users_id_fk": {
+          "name": "headlines_submitter_id_users_id_fk",
+          "tableFrom": "headlines",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "submitter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "headlines_meeting_id_meetings_id_fk": {
+          "name": "headlines_meeting_id_meetings_id_fk",
+          "tableFrom": "headlines",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "meeting_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.issues": {
+      "name": "issues",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitter_id": {
+          "name": "submitter_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_team_id": {
+          "name": "source_team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_dept_id": {
+          "name": "target_dept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'medium'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "assigned_to_id": {
+          "name": "assigned_to_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_id": {
+          "name": "meeting_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "escalate_to_leadership": {
+          "name": "escalate_to_leadership",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "resolution_notes": {
+          "name": "resolution_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sop_link": {
+          "name": "sop_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_fathom_source": {
+          "name": "is_fathom_source",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "clickup_task_id": {
+          "name": "clickup_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "issues_submitter_id_users_id_fk": {
+          "name": "issues_submitter_id_users_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "submitter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "issues_source_team_id_teams_id_fk": {
+          "name": "issues_source_team_id_teams_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "source_team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "issues_target_dept_id_teams_id_fk": {
+          "name": "issues_target_dept_id_teams_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "target_dept_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "issues_assigned_to_id_users_id_fk": {
+          "name": "issues_assigned_to_id_users_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "assigned_to_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "issues_meeting_id_meetings_id_fk": {
+          "name": "issues_meeting_id_meetings_id_fk",
+          "tableFrom": "issues",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "meeting_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.meetings": {
+      "name": "meetings",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scheduled_at": {
+          "name": "scheduled_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "host_id": {
+          "name": "host_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'upcoming'"
+        },
+        "fathom_url": {
+          "name": "fathom_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meeting_rating_avg": {
+          "name": "meeting_rating_avg",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summary_sent_at": {
+          "name": "summary_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "meetings_team_id_teams_id_fk": {
+          "name": "meetings_team_id_teams_id_fk",
+          "tableFrom": "meetings",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "meetings_host_id_users_id_fk": {
+          "name": "meetings_host_id_users_id_fk",
+          "tableFrom": "meetings",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "host_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.rock_status_history": {
+      "name": "rock_status_history",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "rock_id": {
+          "name": "rock_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meeting_id": {
+          "name": "meeting_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_by_id": {
+          "name": "changed_by_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "changed_at": {
+          "name": "changed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rock_status_history_rock_id_rocks_id_fk": {
+          "name": "rock_status_history_rock_id_rocks_id_fk",
+          "tableFrom": "rock_status_history",
+          "tableTo": "rocks",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "rock_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rock_status_history_meeting_id_meetings_id_fk": {
+          "name": "rock_status_history_meeting_id_meetings_id_fk",
+          "tableFrom": "rock_status_history",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "meeting_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rock_status_history_changed_by_id_users_id_fk": {
+          "name": "rock_status_history_changed_by_id_users_id_fk",
+          "tableFrom": "rock_status_history",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "changed_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.rocks": {
+      "name": "rocks",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level": {
+          "name": "level",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quarter": {
+          "name": "quarter",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_rock_id": {
+          "name": "parent_rock_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'on_track'"
+        },
+        "clickup_task_id": {
+          "name": "clickup_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rocks_team_id_teams_id_fk": {
+          "name": "rocks_team_id_teams_id_fk",
+          "tableFrom": "rocks",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rocks_owner_id_users_id_fk": {
+          "name": "rocks_owner_id_users_id_fk",
+          "tableFrom": "rocks",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rocks_parent_rock_id_rocks_id_fk": {
+          "name": "rocks_parent_rock_id_rocks_id_fk",
+          "tableFrom": "rocks",
+          "tableTo": "rocks",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "parent_rock_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.settings": {
+      "name": "settings",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "settings_key_unique": {
+          "name": "settings_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.teams": {
+      "name": "teams",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.todos": {
+      "name": "todos",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_to_id": {
+          "name": "assigned_to_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meeting_id": {
+          "name": "meeting_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "carry_over_reason": {
+          "name": "carry_over_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "linked_rock_id": {
+          "name": "linked_rock_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acknowledged_at": {
+          "name": "acknowledged_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "clickup_task_id": {
+          "name": "clickup_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "todos_assigned_to_id_users_id_fk": {
+          "name": "todos_assigned_to_id_users_id_fk",
+          "tableFrom": "todos",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "assigned_to_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "todos_team_id_teams_id_fk": {
+          "name": "todos_team_id_teams_id_fk",
+          "tableFrom": "todos",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "todos_meeting_id_meetings_id_fk": {
+          "name": "todos_meeting_id_meetings_id_fk",
+          "tableFrom": "todos",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "meeting_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "todos_linked_rock_id_rocks_id_fk": {
+          "name": "todos_linked_rock_id_rocks_id_fk",
+          "tableFrom": "todos",
+          "tableTo": "rocks",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "linked_rock_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.users": {
+      "name": "users",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "users_team_id_teams_id_fk": {
+          "name": "users_team_id_teams_id_fk",
+          "tableFrom": "users",
+          "tableTo": "teams",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna.vto": {
+      "name": "vto",
+      "schema": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "core_values": {
+          "name": "core_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "core_focus": {
+          "name": "core_focus",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ten_year_target": {
+          "name": "ten_year_target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "three_year_picture": {
+          "name": "three_year_picture",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "one_year_plan": {
+          "name": "one_year_plan",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marketing_strategy": {
+          "name": "marketing_strategy",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "three_uniques": {
+          "name": "three_uniques",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proven_process": {
+          "name": "proven_process",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_reviewed_at": {
+          "name": "last_reviewed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_by_id": {
+          "name": "reviewed_by_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "leadership_session_id": {
+          "name": "leadership_session_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "vto_reviewed_by_id_users_id_fk": {
+          "name": "vto_reviewed_by_id_users_id_fk",
+          "tableFrom": "vto",
+          "tableTo": "users",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "reviewed_by_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vto_leadership_session_id_meetings_id_fk": {
+          "name": "vto_leadership_session_id_meetings_id_fk",
+          "tableFrom": "vto",
+          "tableTo": "meetings",
+          "schemaTo": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna",
+          "columnsFrom": [
+            "leadership_session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "m4mom3q0m8bw2p9w93urcjeb9x2y4dna": "m4mom3q0m8bw2p9w93urcjeb9x2y4dna"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

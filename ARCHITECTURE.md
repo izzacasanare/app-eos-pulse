@@ -24,6 +24,8 @@ Each layer may only import from the layer directly below it. Skipping layers is 
 | issues | `issues.domain.ts` | `issues.handler.ts` | IDS lifecycle — log, discuss, resolve, enforce resolution rules |
 | rocks | `rocks.domain.ts` | `rocks.handler.ts` | Quarterly rocks CRUD, status transitions, append-only history |
 | todos | `todos.domain.ts` | `todos.handler.ts` | Meeting to-dos, ownership, completion tracking |
+| checkins | `checkins.domain.ts` | `checkins.handler.ts` | Pre-meeting Personal/Professional Good News + missing-member roll-up |
+| headlines | `headlines.domain.ts` | `headlines.handler.ts` | Pre-meeting headlines (absences, headcount, closed-won, cancellations) and IDS escalation |
 | nudges | `nudges.domain.ts` | *(no HTTP handler — cron-driven)* | Schedule and dispatch Teams accountability nudges |
 
 ## Dependency Rules
@@ -59,15 +61,24 @@ service/
     issues.domain.ts
     rocks.domain.ts
     todos.domain.ts
+    checkins.domain.ts
+    headlines.domain.ts
     nudges.domain.ts
   handlers/
     meetings.handler.ts
     issues.handler.ts
     rocks.handler.ts
     todos.handler.ts
+    checkins.handler.ts
+    headlines.handler.ts
 
 pages/
   (React UI — imports @mspbots/ui, @mspbots/fetch, lucide-react)
+  PreMeeting/
+    CheckinPage.tsx       ← Personal & Professional Good News form
+    HeadlinesPage.tsx     ← Multi-headline submission form
+    RockUpdatePage.tsx    ← Status selector with required comment for off_track/blocked
+    TodoUpdatePage.tsx    ← Status selector with notUpdated warning
 
 scripts/
   lint-arch.ts       ← mechanical enforcement of these rules
