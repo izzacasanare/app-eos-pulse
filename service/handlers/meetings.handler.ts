@@ -13,24 +13,35 @@
 
 import type { HandlerParams } from "@mspbots/type";
 import {
+  advanceSegment,
   autoCreateWeeklySession,
+  closeLiveSession,
   closeMeeting,
   createMeeting,
   deleteMeeting,
   getCurrentHost,
   getMeetingById,
+  getMeetingSegments,
   getMeetingsByTeam,
   getHostPrep,
   getUpcomingMeetings,
   listMeetings,
+  openLiveSession,
   openMeetingSession,
   updateMeeting,
   updateMeetingStatus,
+  InvalidSegmentError,
   MeetingCloseBlockedError,
   MeetingNotFoundError,
+  MeetingNotLiveError,
   MeetingStatusTransitionError,
+  SessionCloseGateError,
 } from "../domain/meetings.domain.ts";
-import type { MeetingStatus, MeetingType } from "../domain/meetings.domain.ts";
+import type {
+  MeetingStatus,
+  MeetingType,
+  SessionSegment,
+} from "../domain/meetings.domain.ts";
 
 export const meetingsHandler = {
 
@@ -145,6 +156,97 @@ export const meetingsHandler = {
       }
       if (err instanceof MeetingStatusTransitionError) {
         return { error: "INVALID_STATUS_TRANSITION", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Live session
+  // -------------------------------------------------------------------------
+
+  /** Opens the live session: upcoming → live, stamps started_at, opens segment 1. */
+  async "POST /api/meetings/:id/live/open"(params: HandlerParams) {
+    try {
+      const result = await openLiveSession(params.params.id);
+      return result;
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof MeetingStatusTransitionError) {
+        return {
+          status:  400,
+          error:   "INVALID_STATUS_TRANSITION",
+          message: err.message,
+        };
+      }
+      throw err;
+    }
+  },
+
+  /** Advance the live session to the next segment. */
+  async "POST /api/meetings/:id/live/advance"(params: HandlerParams) {
+    const body = params.body as { segment?: string };
+    if (!body?.segment) {
+      return {
+        status:  400,
+        error:   "VALIDATION_ERROR",
+        message: "segment is required",
+      };
+    }
+    try {
+      const segment = await advanceSegment(
+        params.params.id,
+        body.segment as SessionSegment,
+      );
+      return { segment };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof MeetingNotLiveError) {
+        return { status: 400, error: "NOT_LIVE", message: err.message };
+      }
+      if (err instanceof InvalidSegmentError) {
+        return { status: 400, error: "INVALID_SEGMENT", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  /** Read all segments for a meeting (for timeline / agenda checkmarks). */
+  async "GET /api/meetings/:id/segments"(params: HandlerParams) {
+    const segments = await getMeetingSegments(params.params.id);
+    return { segments };
+  },
+
+  /**
+   * Close the live session (live → pending_close). Validates gate conditions
+   * before transitioning. Returns 400 with structured failure if any gate fails.
+   */
+  async "POST /api/meetings/:id/live/close"(params: HandlerParams) {
+    try {
+      const meeting = await closeLiveSession(params.params.id);
+      return { meeting };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof MeetingStatusTransitionError) {
+        return {
+          status:  400,
+          error:   "INVALID_STATUS_TRANSITION",
+          message: err.message,
+        };
+      }
+      if (err instanceof SessionCloseGateError) {
+        return {
+          status:      400,
+          error:       err.failure.reason,
+          message:     err.failure.message,
+          blockingIds: err.failure.blockingIds,
+        };
       }
       throw err;
     }

@@ -68,6 +68,7 @@ export const meetings = appSchema.table("meetings", {
   teamId:            uuid("team_id").notNull().references(() => teams.id),
   type:              text("type").notNull(),             // 'l10' | 'quarterly'
   scheduledAt:       timestamp("scheduled_at").notNull(),
+  startedAt:         timestamp("started_at"),
   hostId:            uuid("host_id").references(() => users.id),
   status:            text("status").notNull().default("upcoming"), // 'upcoming' | 'live' | 'pending_close' | 'closed'
   fathomUrl:         text("fathom_url"),
@@ -78,6 +79,21 @@ export const meetings = appSchema.table("meetings", {
 
 export type Meeting    = typeof meetings.$inferSelect;
 export type NewMeeting = typeof meetings.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// meeting_segments
+// ---------------------------------------------------------------------------
+
+export const meetingSegments = appSchema.table("meeting_segments", {
+  id:          defaultId(),
+  meetingId:   uuid("meeting_id").notNull().references(() => meetings.id),
+  segmentName: text("segment_name").notNull(),
+  startedAt:   timestamp("started_at").notNull().defaultNow(),
+  endedAt:     timestamp("ended_at"),
+});
+
+export type MeetingSegment    = typeof meetingSegments.$inferSelect;
+export type NewMeetingSegment = typeof meetingSegments.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // checkins

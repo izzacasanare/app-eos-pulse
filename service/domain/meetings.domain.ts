@@ -12,10 +12,10 @@
  * Imports forbidden: handlers/, HTTP context, raw fetch()
  */
 
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne } from "drizzle-orm";
 import { db } from "../db.ts";
-import { issues, meetings, todos, users } from "../schema.ts";
-import type { Issue, Meeting, Todo, User } from "../schema.ts";
+import { issues, meetingSegments, meetings, todos, users } from "../schema.ts";
+import type { Issue, Meeting, MeetingSegment, Todo, User } from "../schema.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +23,18 @@ import type { Issue, Meeting, Todo, User } from "../schema.ts";
 
 export type MeetingType   = "l10" | "quarterly";
 export type MeetingStatus = "upcoming" | "live" | "pending_close" | "closed";
+
+export const SESSION_SEGMENTS = [
+  "check_in",
+  "rock_review",
+  "scorecard_review",
+  "headlines",
+  "todo_review",
+  "ids",
+  "wrap_up",
+] as const;
+
+export type SessionSegment = typeof SESSION_SEGMENTS[number];
 
 export interface CreateMeetingInput {
   teamId:      string;
@@ -454,6 +466,213 @@ export async function getHostPrep(meetingId: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Live session — open / advance segment / gated close
+// ---------------------------------------------------------------------------
+
+export interface OpenLiveSessionResult {
+  meeting: Meeting;
+  segment: MeetingSegment;
+}
+
+/**
+ * Transitions an upcoming meeting to 'live', stamps started_at, and opens
+ * the first segment (check_in). Idempotent: returns the existing live state
+ * if the meeting is already live.
+ */
+export async function openLiveSession(
+  meetingId: string,
+): Promise<OpenLiveSessionResult> {
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+
+  if (meeting.status === "live") {
+    const [existing] = await db
+      .select()
+      .from(meetingSegments)
+      .where(
+        and(
+          eq(meetingSegments.meetingId, meetingId),
+          isNull(meetingSegments.endedAt),
+        ),
+      )
+      .orderBy(desc(meetingSegments.startedAt))
+      .limit(1);
+    if (existing) return { meeting, segment: existing };
+  }
+
+  if (meeting.status !== "upcoming" && meeting.status !== "live") {
+    throw new MeetingStatusTransitionError(
+      meeting.status as MeetingStatus,
+      "live",
+    );
+  }
+
+  const now = new Date();
+
+  const [updatedMeeting] = await db
+    .update(meetings)
+    .set({ status: "live", startedAt: meeting.startedAt ?? now })
+    .where(eq(meetings.id, meetingId))
+    .returning();
+
+  const [segment] = await db
+    .insert(meetingSegments)
+    .values({
+      meetingId,
+      segmentName: SESSION_SEGMENTS[0],
+      startedAt:   now,
+    })
+    .returning();
+
+  return { meeting: updatedMeeting, segment };
+}
+
+/**
+ * Advance to a new segment. Closes the current open segment (sets ended_at)
+ * and inserts a new row in meeting_segments.
+ */
+export async function advanceSegment(
+  meetingId: string,
+  segment:   SessionSegment,
+): Promise<MeetingSegment> {
+  if (!SESSION_SEGMENTS.includes(segment)) {
+    throw new InvalidSegmentError(segment);
+  }
+
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+  if (meeting.status !== "live") {
+    throw new MeetingNotLiveError(meetingId);
+  }
+
+  const now = new Date();
+
+  await db
+    .update(meetingSegments)
+    .set({ endedAt: now })
+    .where(
+      and(
+        eq(meetingSegments.meetingId, meetingId),
+        isNull(meetingSegments.endedAt),
+      ),
+    );
+
+  const [row] = await db
+    .insert(meetingSegments)
+    .values({
+      meetingId,
+      segmentName: segment,
+      startedAt:   now,
+    })
+    .returning();
+
+  return row;
+}
+
+export async function getMeetingSegments(
+  meetingId: string,
+): Promise<MeetingSegment[]> {
+  return db
+    .select()
+    .from(meetingSegments)
+    .where(eq(meetingSegments.meetingId, meetingId))
+    .orderBy(asc(meetingSegments.startedAt));
+}
+
+export type CloseGateReason =
+  | "OPEN_IDS_ITEMS"
+  | "TODOS_MISSING_FIELDS"
+  | "TODOS_NOT_ACKNOWLEDGED";
+
+export interface CloseGateFailure {
+  reason:      CloseGateReason;
+  blockingIds: string[];
+  message:     string;
+}
+
+/**
+ * Validate gate conditions and transition live → pending_close.
+ *
+ * Gates:
+ *  1. Zero open IDS items (issues with status !== 'closed') for this meeting
+ *  2. Every todo for this meeting has an assignee and a due date
+ *  3. Every todo for this meeting has been acknowledged or flagged
+ *
+ * Throws SessionCloseGateError on the first failing gate.
+ */
+export async function closeLiveSession(meetingId: string): Promise<Meeting> {
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+  if (meeting.status !== "live") {
+    throw new MeetingStatusTransitionError(
+      meeting.status as MeetingStatus,
+      "pending_close",
+    );
+  }
+
+  // Gate 1: open IDS items
+  const openIds = await db
+    .select({ id: issues.id })
+    .from(issues)
+    .where(and(eq(issues.meetingId, meetingId), ne(issues.status, "closed")));
+  if (openIds.length > 0) {
+    throw new SessionCloseGateError({
+      reason:      "OPEN_IDS_ITEMS",
+      blockingIds: openIds.map((i) => i.id),
+      message: `${openIds.length} IDS item(s) are still open. Resolve or close them before ending the session.`,
+    });
+  }
+
+  // Gate 2: todos with missing fields
+  const meetingTodos = await db
+    .select()
+    .from(todos)
+    .where(eq(todos.meetingId, meetingId));
+
+  const missingFields = meetingTodos.filter(
+    (t) => !t.assignedToId || !t.dueDate,
+  );
+  if (missingFields.length > 0) {
+    throw new SessionCloseGateError({
+      reason:      "TODOS_MISSING_FIELDS",
+      blockingIds: missingFields.map((t) => t.id),
+      message: `${missingFields.length} to-do(s) are missing an assignee or due date.`,
+    });
+  }
+
+  // Gate 3: new todos must be acknowledged or flagged
+  const unhandled = meetingTodos.filter(
+    (t) =>
+      t.acknowledgedAt === null &&
+      (t.carryOverReason === null || t.carryOverReason.trim() === ""),
+  );
+  if (unhandled.length > 0) {
+    throw new SessionCloseGateError({
+      reason:      "TODOS_NOT_ACKNOWLEDGED",
+      blockingIds: unhandled.map((t) => t.id),
+      message: `${unhandled.length} to-do(s) have not been acknowledged or flagged.`,
+    });
+  }
+
+  await db
+    .update(meetingSegments)
+    .set({ endedAt: new Date() })
+    .where(
+      and(
+        eq(meetingSegments.meetingId, meetingId),
+        isNull(meetingSegments.endedAt),
+      ),
+    );
+
+  const [updated] = await db
+    .update(meetings)
+    .set({ status: "pending_close" })
+    .where(eq(meetings.id, meetingId))
+    .returning();
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -482,5 +701,28 @@ export class MeetingStatusTransitionError extends Error {
       `Cannot transition meeting from '${currentStatus}' to '${targetStatus}'.`,
     );
     this.name = "MeetingStatusTransitionError";
+  }
+}
+
+export class MeetingNotLiveError extends Error {
+  constructor(id: string) {
+    super(`Meeting '${id}' is not live.`);
+    this.name = "MeetingNotLiveError";
+  }
+}
+
+export class InvalidSegmentError extends Error {
+  constructor(segment: string) {
+    super(
+      `Invalid segment '${segment}'. Allowed: ${SESSION_SEGMENTS.join(", ")}.`,
+    );
+    this.name = "InvalidSegmentError";
+  }
+}
+
+export class SessionCloseGateError extends Error {
+  constructor(public readonly failure: CloseGateFailure) {
+    super(failure.message);
+    this.name = "SessionCloseGateError";
   }
 }
