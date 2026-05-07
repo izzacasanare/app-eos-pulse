@@ -329,6 +329,176 @@ Tests the stored ClickUp API key by calling `GET /api/v2/team`.
 
 ---
 
+## Post-Meeting
+
+The post-meeting workflow runs after `live → pending_close`. Hosts submit
+the Fathom recording, verify the host checklist, and archive the session
+(`pending_close → closed`) once all gates pass.
+
+### `POST /api/meetings/:id/fathom`
+
+Stores the Fathom recording URL on the meeting and enqueues an AI scan
+job (used to extract follow-up issues from the transcript).
+
+**Body**
+```json
+{
+  "url":           "https://fathom.video/calls/123",
+  "submittedById": "uuid"
+}
+```
+
+**Response `200`**
+```json
+{ "meeting": Meeting }
+```
+
+**Response `400` (invalid URL)**
+```json
+{ "error": "INVALID_FATHOM_LINK", "message": "Fathom URL is malformed." }
+```
+
+---
+
+### `GET /api/meetings/:id/host-checklist`
+
+Returns the post-meeting host checklist as a flat object of booleans.
+The UI uses these to render ✓ / ✗ next to each item; the archive button
+is disabled until all five are true.
+
+**Response `200`**
+```json
+{
+  "checklist": {
+    "all_ids_closed":          true,
+    "all_todos_have_owner":    true,
+    "all_todos_have_due_date": true,
+    "off_track_rocks_flagged": true,
+    "fathom_link_submitted":   false
+  }
+}
+```
+
+---
+
+### `GET /api/meetings/:id/summary`
+
+Computes a fresh summary snapshot — to-dos, IDS items, and rock changes
+are read live each call. `ratingAvg` is `null` until at least one rating
+is submitted.
+
+**Response `200`**
+```json
+{
+  "summary": {
+    "meetingId":    "uuid",
+    "todosCreated": 4,
+    "issuesLogged": 2,
+    "rockChanges":  3,
+    "ratingAvg":    8.3,
+    "ratingsCount": 6
+  }
+}
+```
+
+---
+
+### `POST /api/meetings/:id/complete`
+
+Archives the session: validates the host checklist, snapshots the
+rating average onto `meetings.meeting_rating_avg`, stamps `summary_sent_at`,
+and transitions `pending_close → closed`.
+
+**Response `200`**
+```json
+{
+  "meeting": Meeting,
+  "summary": MeetingSummary
+}
+```
+
+**Response `400` (checklist incomplete)**
+```json
+{
+  "error":   "HOST_CHECKLIST_INCOMPLETE",
+  "message": "Host checklist incomplete — 2 item(s) failing: all_ids_closed, fathom_link_submitted.",
+  "missing": ["all_ids_closed", "fathom_link_submitted"]
+}
+```
+
+---
+
+### `POST /api/meetings/:id/rate`
+
+Submit a meeting rating (1–10). A non-empty `reason` is required when
+`rating < 5`.
+
+**Body**
+```json
+{
+  "memberId": "uuid",
+  "rating":   8,
+  "reason":   "optional unless rating < 5"
+}
+```
+
+**Response `200`**
+```json
+{ "rating": MeetingRating }
+```
+
+**Response `400` (invalid)**
+```json
+{ "error": "INVALID_RATING", "message": "A reason is required for ratings below 5." }
+```
+
+---
+
+### `GET /api/meetings/:id/ratings`
+
+All ratings for a meeting, oldest first.
+
+**Response `200`**
+```json
+{ "ratings": [MeetingRating] }
+```
+
+`MeetingRating` shape:
+
+```typescript
+interface MeetingRating {
+  id:        string  // uuid
+  meetingId: string
+  memberId:  string
+  rating:    number  // 1-10
+  reason:    string | null
+  createdAt: string
+}
+```
+
+---
+
+### `GET /api/teams/:id/fathom-links`
+
+Lists every Fathom recording URL across the team's meetings, newest
+first. Powers the team-wide Fathom index page.
+
+**Response `200`**
+```json
+{
+  "links": [
+    {
+      "meetingId":   "uuid",
+      "scheduledAt": "2026-05-06T14:00:00Z",
+      "type":        "l10",
+      "fathomUrl":   "https://fathom.video/..."
+    }
+  ]
+}
+```
+
+---
+
 ## Domain Errors
 
 | Error class | When thrown |
@@ -336,3 +506,6 @@ Tests the stored ClickUp API key by calling `GET /api/v2/team`.
 | `MeetingNotFoundError` | `getMeetingById`, `updateMeetingStatus`, `updateMeeting`, `deleteMeeting` with unknown id |
 | `MeetingCloseBlockedError` | Closing while linked issues are `open`/`assigned`/`in_progress` |
 | `MeetingStatusTransitionError` | Invalid state machine transition |
+| `HostChecklistIncompleteError` | `completeMeetingClose` called while one or more checklist items still fail |
+| `InvalidFathomLinkError` | `submitFathomLink` with empty or malformed URL |
+| `InvalidRatingError` | Rating outside 1–10, or `< 5` without a reason |

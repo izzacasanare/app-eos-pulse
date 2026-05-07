@@ -17,19 +17,29 @@ import {
   autoCreateWeeklySession,
   closeLiveSession,
   closeMeeting,
+  completeMeetingClose,
   createMeeting,
   deleteMeeting,
+  generateMeetingSummary,
   getCurrentHost,
+  getHostChecklist,
   getMeetingById,
   getMeetingSegments,
   getMeetingsByTeam,
   getHostPrep,
   getUpcomingMeetings,
+  listFathomLinksByTeam,
+  listMeetingRatings,
   listMeetings,
   openLiveSession,
   openMeetingSession,
+  submitFathomLink,
+  submitMeetingRating,
   updateMeeting,
   updateMeetingStatus,
+  HostChecklistIncompleteError,
+  InvalidFathomLinkError,
+  InvalidRatingError,
   InvalidSegmentError,
   MeetingCloseBlockedError,
   MeetingNotFoundError,
@@ -351,6 +361,130 @@ export const meetingsHandler = {
       }
       throw err;
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Post-meeting — Fathom link, host checklist, summary, complete close
+  // -------------------------------------------------------------------------
+
+  async "POST /api/meetings/:id/fathom"(params: HandlerParams) {
+    const body = params.body as { url?: string; submittedById?: string };
+    if (!body?.url || !body?.submittedById) {
+      return {
+        status:  400,
+        error:   "VALIDATION_ERROR",
+        message: "url and submittedById are required",
+      };
+    }
+    try {
+      const meeting = await submitFathomLink(
+        params.params.id,
+        body.url,
+        body.submittedById,
+      );
+      return { meeting };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof InvalidFathomLinkError) {
+        return { status: 400, error: "INVALID_FATHOM_LINK", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  async "GET /api/meetings/:id/host-checklist"(params: HandlerParams) {
+    try {
+      const checklist = await getHostChecklist(params.params.id);
+      return { checklist };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  async "GET /api/meetings/:id/summary"(params: HandlerParams) {
+    try {
+      const summary = await generateMeetingSummary(params.params.id);
+      return { summary };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  async "POST /api/meetings/:id/complete"(params: HandlerParams) {
+    try {
+      const result = await completeMeetingClose(params.params.id);
+      return result;
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof MeetingStatusTransitionError) {
+        return {
+          status:  400,
+          error:   "INVALID_STATUS_TRANSITION",
+          message: err.message,
+        };
+      }
+      if (err instanceof HostChecklistIncompleteError) {
+        return {
+          status:  400,
+          error:   "HOST_CHECKLIST_INCOMPLETE",
+          message: err.message,
+          missing: err.missing,
+        };
+      }
+      throw err;
+    }
+  },
+
+  async "POST /api/meetings/:id/rate"(params: HandlerParams) {
+    const body = params.body as {
+      memberId?: string;
+      rating?:   number;
+      reason?:   string | null;
+    };
+    if (!body?.memberId || typeof body?.rating !== "number") {
+      return {
+        status:  400,
+        error:   "VALIDATION_ERROR",
+        message: "memberId and rating are required",
+      };
+    }
+    try {
+      const rating = await submitMeetingRating({
+        meetingId: params.params.id,
+        memberId:  body.memberId,
+        rating:    body.rating,
+        reason:    body.reason ?? null,
+      });
+      return { rating };
+    } catch (err) {
+      if (err instanceof MeetingNotFoundError) {
+        return { status: 404, error: "NOT_FOUND", message: err.message };
+      }
+      if (err instanceof InvalidRatingError) {
+        return { status: 400, error: "INVALID_RATING", message: err.message };
+      }
+      throw err;
+    }
+  },
+
+  async "GET /api/meetings/:id/ratings"(params: HandlerParams) {
+    const ratings = await listMeetingRatings(params.params.id);
+    return { ratings };
+  },
+
+  async "GET /api/teams/:id/fathom-links"(params: HandlerParams) {
+    const links = await listFathomLinksByTeam(params.params.id);
+    return { links };
   },
 
 };

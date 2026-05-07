@@ -14,8 +14,26 @@
 
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne } from "drizzle-orm";
 import { db } from "../db.ts";
-import { issues, meetingSegments, meetings, todos, users } from "../schema.ts";
-import type { Issue, Meeting, MeetingSegment, Todo, User } from "../schema.ts";
+import {
+  issues,
+  meetingRatings,
+  meetingSegments,
+  meetings,
+  rockStatusHistory,
+  rocks,
+  settings,
+  todos,
+  users,
+} from "../schema.ts";
+import type {
+  Issue,
+  Meeting,
+  MeetingRating,
+  MeetingSegment,
+  NewMeetingRating,
+  Todo,
+  User,
+} from "../schema.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -673,6 +691,283 @@ export async function closeLiveSession(meetingId: string): Promise<Meeting> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-meeting — Fathom link, host checklist, summary, close
+// ---------------------------------------------------------------------------
+
+export interface HostChecklist {
+  all_ids_closed:           boolean;
+  all_todos_have_owner:     boolean;
+  all_todos_have_due_date:  boolean;
+  off_track_rocks_flagged:  boolean;
+  fathom_link_submitted:    boolean;
+}
+
+export interface MeetingSummary {
+  meetingId:        string;
+  todosCreated:     number;
+  issuesLogged:     number;
+  rockChanges:      number;
+  ratingAvg:        number | null;
+  ratingsCount:     number;
+}
+
+/**
+ * Stores the Fathom recording URL on the meeting and triggers an
+ * AI-scan queue entry for downstream issue extraction.
+ *
+ * The queue is currently a fire-and-forget settings row; a worker
+ * picks it up out of band (see SECURITY.md for the worker contract).
+ */
+export async function submitFathomLink(
+  meetingId:      string,
+  url:            string,
+  submittedById:  string,
+): Promise<Meeting> {
+  if (!url || !url.trim()) {
+    throw new InvalidFathomLinkError("Fathom URL is required.");
+  }
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new InvalidFathomLinkError("Fathom URL must be http(s).");
+    }
+  } catch {
+    throw new InvalidFathomLinkError("Fathom URL is malformed.");
+  }
+
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+
+  const [updated] = await db
+    .update(meetings)
+    .set({ fathomUrl: trimmed })
+    .where(eq(meetings.id, meetingId))
+    .returning();
+
+  // Enqueue an AI scan job. The Fathom worker reads this on its next tick.
+  await enqueueFathomScan(meetingId, trimmed, submittedById);
+
+  return updated;
+}
+
+async function enqueueFathomScan(
+  meetingId:     string,
+  url:           string,
+  submittedById: string,
+): Promise<void> {
+  // Lightweight queue: a JSON row in `settings` keyed by FATHOM_SCAN_QUEUE
+  // that the worker drains. Domain owns the schema for this row.
+  const KEY = "FATHOM_SCAN_QUEUE";
+  const [existing] = await db
+    .select()
+    .from(settings)
+    .where(eq(settings.key, KEY));
+
+  const job = {
+    meetingId,
+    url,
+    submittedById,
+    enqueuedAt: new Date().toISOString(),
+  };
+
+  if (!existing) {
+    await db.insert(settings).values({ key: KEY, value: JSON.stringify([job]) });
+    return;
+  }
+
+  let queue: Array<typeof job> = [];
+  try { queue = JSON.parse(existing.value ?? "[]"); } catch { queue = []; }
+  queue.push(job);
+  await db
+    .update(settings)
+    .set({ value: JSON.stringify(queue) })
+    .where(eq(settings.key, KEY));
+}
+
+/**
+ * Returns each host-prep gate as a boolean. UI can render checks/crosses
+ * directly — no derived strings.
+ */
+export async function getHostChecklist(meetingId: string): Promise<HostChecklist> {
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+
+  const [meetingTodos, openIds, teamRocks] = await Promise.all([
+    db.select().from(todos).where(eq(todos.meetingId, meetingId)),
+    db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(and(eq(issues.meetingId, meetingId), ne(issues.status, "closed"))),
+    db.select().from(rocks).where(eq(rocks.teamId, meeting.teamId)),
+  ]);
+
+  const offTrackRocks = teamRocks.filter((r) => r.status === "off_track");
+  // Off-track rocks must be flagged into IDS as an issue tied to this meeting.
+  const flaggedIssues = await db
+    .select({ id: issues.id, title: issues.title })
+    .from(issues)
+    .where(eq(issues.meetingId, meetingId));
+  const flaggedTitles = new Set(flaggedIssues.map((i) => i.title));
+  const offTrackFlagged = offTrackRocks.every((r) =>
+    flaggedTitles.has(`Off-track rock: ${r.title}`)
+  );
+
+  return {
+    all_ids_closed:          openIds.length === 0,
+    all_todos_have_owner:    meetingTodos.every((t) => !!t.assignedToId),
+    all_todos_have_due_date: meetingTodos.every((t) => !!t.dueDate),
+    off_track_rocks_flagged: offTrackFlagged,
+    fathom_link_submitted:   !!meeting.fathomUrl,
+  };
+}
+
+/**
+ * Validates host checklist fully complete, computes summary, snapshots
+ * rating average, then archives the session (pending_close → closed).
+ */
+export async function completeMeetingClose(meetingId: string): Promise<{
+  meeting: Meeting;
+  summary: MeetingSummary;
+}> {
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+
+  if (meeting.status !== "pending_close") {
+    throw new MeetingStatusTransitionError(
+      meeting.status as MeetingStatus,
+      "closed",
+    );
+  }
+
+  const checklist = await getHostChecklist(meetingId);
+  const incomplete = (Object.entries(checklist) as [keyof HostChecklist, boolean][])
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+
+  if (incomplete.length > 0) {
+    throw new HostChecklistIncompleteError(incomplete);
+  }
+
+  const summary = await generateMeetingSummary(meetingId);
+
+  const [updated] = await db
+    .update(meetings)
+    .set({
+      status:           "closed",
+      meetingRatingAvg: summary.ratingAvg,
+      summarySentAt:    new Date(),
+    })
+    .where(eq(meetings.id, meetingId))
+    .returning();
+
+  return { meeting: updated, summary };
+}
+
+export async function generateMeetingSummary(
+  meetingId: string,
+): Promise<MeetingSummary> {
+  const meeting = await fetchMeeting(meetingId);
+  if (!meeting) throw new MeetingNotFoundError(meetingId);
+
+  const [meetingTodos, meetingIssues, ratings] = await Promise.all([
+    db.select({ id: todos.id }).from(todos).where(eq(todos.meetingId, meetingId)),
+    db.select({ id: issues.id }).from(issues).where(eq(issues.meetingId, meetingId)),
+    db
+      .select({ rating: meetingRatings.rating })
+      .from(meetingRatings)
+      .where(eq(meetingRatings.meetingId, meetingId)),
+  ]);
+
+  // Rock changes recorded against this meeting.
+  const rockChanges = await db
+    .select({ id: rockStatusHistory.id })
+    .from(rockStatusHistory)
+    .where(eq(rockStatusHistory.meetingId, meetingId));
+
+  const ratingAvg = ratings.length === 0
+    ? null
+    : Math.round(
+        (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length) * 10,
+      ) / 10;
+
+  return {
+    meetingId,
+    todosCreated:  meetingTodos.length,
+    issuesLogged:  meetingIssues.length,
+    rockChanges:   rockChanges.length,
+    ratingAvg,
+    ratingsCount:  ratings.length,
+  };
+}
+
+export interface SubmitMeetingRatingInput {
+  meetingId: string;
+  memberId:  string;
+  rating:    number;
+  reason?:   string | null;
+}
+
+export async function submitMeetingRating(
+  input: SubmitMeetingRatingInput,
+): Promise<MeetingRating> {
+  if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 10) {
+    throw new InvalidRatingError("Rating must be an integer between 1 and 10.");
+  }
+  if (input.rating < 5 && (!input.reason || !input.reason.trim())) {
+    throw new InvalidRatingError("A reason is required for ratings below 5.");
+  }
+
+  const meeting = await fetchMeeting(input.meetingId);
+  if (!meeting) throw new MeetingNotFoundError(input.meetingId);
+
+  const values: NewMeetingRating = {
+    meetingId: input.meetingId,
+    memberId:  input.memberId,
+    rating:    input.rating,
+    reason:    input.reason?.trim() || null,
+  };
+
+  const [row] = await db.insert(meetingRatings).values(values).returning();
+  return row;
+}
+
+export async function listMeetingRatings(
+  meetingId: string,
+): Promise<MeetingRating[]> {
+  return db
+    .select()
+    .from(meetingRatings)
+    .where(eq(meetingRatings.meetingId, meetingId))
+    .orderBy(asc(meetingRatings.createdAt));
+}
+
+/** Fathom links across a team's meetings, newest first. */
+export async function listFathomLinksByTeam(teamId: string): Promise<
+  Array<{ meetingId: string; scheduledAt: string; type: string; fathomUrl: string }>
+> {
+  const rows = await db
+    .select({
+      meetingId:   meetings.id,
+      scheduledAt: meetings.scheduledAt,
+      type:        meetings.type,
+      fathomUrl:   meetings.fathomUrl,
+    })
+    .from(meetings)
+    .where(eq(meetings.teamId, teamId))
+    .orderBy(desc(meetings.scheduledAt));
+
+  return rows
+    .filter((r) => !!r.fathomUrl)
+    .map((r) => ({
+      meetingId:   r.meetingId,
+      scheduledAt: r.scheduledAt.toISOString(),
+      type:        r.type,
+      fathomUrl:   r.fathomUrl as string,
+    }));
+}
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -724,5 +1019,28 @@ export class SessionCloseGateError extends Error {
   constructor(public readonly failure: CloseGateFailure) {
     super(failure.message);
     this.name = "SessionCloseGateError";
+  }
+}
+
+export class HostChecklistIncompleteError extends Error {
+  constructor(public readonly missing: Array<keyof HostChecklist>) {
+    super(
+      `Host checklist incomplete — ${missing.length} item(s) failing: ${missing.join(", ")}.`,
+    );
+    this.name = "HostChecklistIncompleteError";
+  }
+}
+
+export class InvalidFathomLinkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidFathomLinkError";
+  }
+}
+
+export class InvalidRatingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidRatingError";
   }
 }

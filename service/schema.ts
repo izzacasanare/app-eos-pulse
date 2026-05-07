@@ -218,6 +218,22 @@ export type Todo    = typeof todos.$inferSelect;
 export type NewTodo = typeof todos.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// meeting_ratings
+// ---------------------------------------------------------------------------
+
+export const meetingRatings = appSchema.table("meeting_ratings", {
+  id:        defaultId(),
+  meetingId: uuid("meeting_id").notNull().references(() => meetings.id),
+  memberId:  uuid("member_id").notNull().references(() => users.id),
+  rating:    integer("rating").notNull(),  // 1-10
+  reason:    text("reason"),               // required when rating < 5 (enforced in domain)
+  createdAt: createdAt(),
+});
+
+export type MeetingRating    = typeof meetingRatings.$inferSelect;
+export type NewMeetingRating = typeof meetingRatings.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // settings
 // ---------------------------------------------------------------------------
 
