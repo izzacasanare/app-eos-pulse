@@ -29,6 +29,7 @@ import {
   Flag,
   Megaphone,
   Mountain,
+  Plus,
   Star,
   Target,
   Timer,
@@ -169,12 +170,20 @@ interface Todo {
 interface MeetingTodoRow { todo: Todo; notUpdated: boolean }
 
 interface Issue {
-  id:          string;
-  title:       string;
-  description: string | null;
-  status:      IssueStatus;
-  priority:    "low" | "medium" | "high" | "critical";
-  meetingId:   string | null;
+  id:                    string;
+  title:                 string;
+  description:           string | null;
+  status:                IssueStatus;
+  priority:              "low" | "medium" | "high" | "critical";
+  meetingId:             string | null;
+  submitterId:           string;
+  sourceTeamId:          string;
+  targetDeptId:          string;
+  assignedToId:          string | null;
+  escalateToLeadership:  boolean;
+  resolutionNotes:       string | null;
+  sopLink:               string | null;
+  isFathomSource:        boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1250,59 +1259,593 @@ function TodoReviewRow({ row, ownerName, busy, onComplete, onReassign, onIds }: 
 }
 
 // ---------------------------------------------------------------------------
-// Segment: IDS (placeholder per Step 09)
+// Segment: IDS — Identify · Discuss · Solve
 // ---------------------------------------------------------------------------
 
+const IDS_PRIORITY_RANK: Record<Issue["priority"], number> = {
+  critical: 0,
+  high:     1,
+  medium:   2,
+  low:      3,
+};
+
+const ISSUE_PRIORITY_BADGE: Record<Issue["priority"], string> = {
+  critical: "bg-red-500/15 text-red-600 border border-red-500/30",
+  high:     "bg-orange-500/15 text-orange-600 border border-orange-500/30",
+  medium:   "bg-sky-500/15 text-sky-600 border border-sky-500/20",
+  low:      "bg-muted text-muted-foreground border border-border",
+};
+
+const ISSUE_RESOLUTION_MIN_LENGTH = 50;
+
+type IdsResolutionMode = "none" | "close_no_action" | "create_todo" | "move_to_rock";
+
 interface IdsPanelProps {
-  meeting: Meeting;
-  detail:  MeetingDetail;
+  meeting:  Meeting;
+  detail:   MeetingDetail;
+  members:  User[];
+  userId:   string;
+  isHost:   boolean;
+  teamById: Record<string, Team>;
+  onChange: () => void;
 }
 
-function IdsPanel({ meeting: _meeting, detail }: IdsPanelProps) {
-  const open = detail.issues.filter((i) => i.status !== "closed");
+interface IdsActiveIssueProps {
+  issue:    Issue;
+  meeting:  Meeting;
+  members:  User[];
+  userId:   string;
+  teamById: Record<string, Team>;
+  onAdvance: () => void;
+  onChange:  () => void;
+}
+
+function IdsPanel({ meeting, detail, members, userId, isHost, teamById, onChange }: IdsPanelProps) {
+  const queue = useMemo(() => {
+    return detail.issues
+      .filter((i) => i.status !== "closed")
+      .slice()
+      .sort(
+        (a, b) =>
+          IDS_PRIORITY_RANK[a.priority] - IDS_PRIORITY_RANK[b.priority],
+      );
+  }, [detail.issues]);
+
+  const [activeId, setActiveId] = useState<string | null>(queue[0]?.id ?? null);
+
+  // Reset active when queue contents change (e.g. after close).
+  useEffect(() => {
+    if (!activeId || !queue.find((i) => i.id === activeId)) {
+      setActiveId(queue[0]?.id ?? null);
+    }
+  }, [queue, activeId]);
+
+  const active = activeId ? queue.find((i) => i.id === activeId) ?? null : null;
+
+  function advance() {
+    const idx = queue.findIndex((i) => i.id === activeId);
+    const next = queue[idx + 1] ?? queue.find((i) => i.id !== activeId) ?? null;
+    setActiveId(next?.id ?? null);
+    onChange();
+  }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Zap className="h-5 w-5 text-primary" />
-        IDS — Identify · Discuss · Solve ({open.length})
-      </h2>
-      <Card className="border-dashed border-primary/30 bg-primary/5">
-        <CardContent className="py-3 flex items-center gap-2 text-sm">
-          <Clock className="h-4 w-4 text-primary" />
-          <span>Full IDS panel ships in Step 09. Stack below is read-only.</span>
-        </CardContent>
-      </Card>
-      {open.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No open issues — the queue is clean.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {open.map((i) => (
-            <Card key={i.id}>
-              <CardContent className="py-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{i.title}</p>
-                  {i.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{i.description}</p>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <Badge variant="outline" className="text-[10px]">
-                    {i.priority}
-                  </Badge>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {i.status}
-                  </Badge>
-                </div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Zap className="h-5 w-5 text-primary" />
+          IDS — Identify · Discuss · Solve ({queue.length})
+        </h2>
+        {!isHost && (
+          <Badge variant="outline" className="text-[10px]">View-only · host drives</Badge>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 space-y-2">
+          <h3 className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+            Issue queue ({queue.length})
+          </h3>
+          {queue.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center text-sm text-muted-foreground">
+                Queue is clean.
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            <div className="space-y-1.5">
+              {queue.map((i) => {
+                const submitter = members.find((m) => m.id === i.submitterId);
+                const dept      = teamById[i.targetDeptId];
+                return (
+                  <button
+                    key={i.id}
+                    type="button"
+                    onClick={() => setActiveId(i.id)}
+                    className={
+                      "w-full text-left rounded-md border px-3 py-2 transition-colors " +
+                      (activeId === i.id
+                        ? "border-primary/50 bg-primary/5"
+                        : "border-border hover:bg-muted/40")
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium line-clamp-2">{i.title}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${ISSUE_PRIORITY_BADGE[i.priority]}`}>
+                        {i.priority}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
+                      <span className="truncate">{submitter?.name ?? "—"}</span>
+                      {dept && (
+                        <>
+                          <span>→</span>
+                          <span className="truncate">{dept.name}</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="pt-2">
+            <IdsQuickAdd meeting={meeting} userId={userId} onAdded={onChange} />
+          </div>
         </div>
+
+        <div className="lg:col-span-2">
+          {active ? (
+            <IdsActiveIssue
+              issue={active}
+              meeting={meeting}
+              members={members}
+              userId={userId}
+              teamById={teamById}
+              onAdvance={advance}
+              onChange={onChange}
+            />
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                No active issue. Add one to the queue or advance to Wrap-Up.
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface IdsQuickAddProps {
+  meeting: Meeting;
+  userId:  string;
+  onAdded: () => void;
+}
+
+function IdsQuickAdd({ meeting, userId, onAdded }: IdsQuickAddProps) {
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  async function add() {
+    if (!title.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await $fetch<{ issue?: Issue; error?: string; message?: string }>(
+        "/api/issues",
+        {
+          method: "POST",
+          body:   JSON.stringify({
+            title:        title.trim(),
+            submitterId:  userId,
+            targetDeptId: meeting.teamId,
+            sourceTeamId: meeting.teamId,
+            priority:     "medium",
+            meetingId:    meeting.id,
+          }),
+        },
+      );
+      if (res?.error) { setError(res.message ?? res.error); return; }
+      setTitle("");
+      onAdded();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to add issue");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="border-dashed">
+      <CardContent className="py-3 space-y-2">
+        <Label htmlFor="ids-quick" className="text-xs">Quick-add issue</Label>
+        <div className="flex gap-1.5">
+          <Input
+            id="ids-quick"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What's the issue?"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+            className="h-8 text-sm"
+          />
+          <Button size="sm" onClick={add} disabled={saving || !title.trim()}>
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {error && <p className="text-[11px] text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function IdsActiveIssue(
+  { issue, meeting, members, userId, teamById, onAdvance, onChange }: IdsActiveIssueProps,
+) {
+  const [mode, setMode] = useState<IdsResolutionMode>("none");
+  const [completed, setCompleted] = useState(false);
+
+  // Whenever the active issue changes, reset the resolution panel.
+  useEffect(() => { setMode("none"); setCompleted(false); }, [issue.id]);
+
+  const submitter = members.find((m) => m.id === issue.submitterId);
+  const dept      = teamById[issue.targetDeptId];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold">{issue.title}</CardTitle>
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+              <span>{submitter?.name ?? "—"}</span>
+              {dept && (<><span>→</span><span>{dept.name}</span></>)}
+            </div>
+          </div>
+          <span className={`text-[11px] px-2 py-0.5 rounded shrink-0 ${ISSUE_PRIORITY_BADGE[issue.priority]}`}>
+            {issue.priority}
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {issue.description && (
+          <div>
+            <h4 className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-1">
+              Description
+            </h4>
+            <p className="text-sm whitespace-pre-wrap">{issue.description}</p>
+          </div>
+        )}
+
+        <div>
+          <h4 className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-1">
+            Discussion
+          </h4>
+          <Textarea
+            rows={3}
+            placeholder="Notes captured during discussion (not persisted — for in-room reference)"
+          />
+        </div>
+
+        <div className="pt-2 border-t border-border space-y-3">
+          <h4 className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+            Resolution
+          </h4>
+
+          {!completed && mode === "none" && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setMode("close_no_action")}
+              >
+                Close: No Action
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setMode("create_todo")}
+              >
+                Create To-Do
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setMode("move_to_rock")}
+              >
+                Move to Rock
+              </Button>
+            </div>
+          )}
+
+          {!completed && mode === "close_no_action" && (
+            <IdsCloseForm
+              issue={issue}
+              userId={userId}
+              onCancel={() => setMode("none")}
+              onDone={() => { setCompleted(true); onChange(); }}
+            />
+          )}
+
+          {!completed && mode === "create_todo" && (
+            <IdsCreateTodoForm
+              issue={issue}
+              meeting={meeting}
+              members={members}
+              userId={userId}
+              onCancel={() => setMode("none")}
+              onDone={() => { setCompleted(true); onChange(); }}
+            />
+          )}
+
+          {!completed && mode === "move_to_rock" && (
+            <IdsMoveToRockForm
+              issue={issue}
+              userId={userId}
+              onCancel={() => setMode("none")}
+              onDone={() => { setCompleted(true); onChange(); }}
+            />
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-[11px] text-muted-foreground">
+              {completed
+                ? "Resolution captured. Move to the next issue."
+                : "Pick a resolution to unlock Next Issue."}
+            </p>
+            <Button
+              size="sm"
+              disabled={!completed}
+              onClick={onAdvance}
+            >
+              Next Issue
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface IdsCloseFormProps {
+  issue:   Issue;
+  userId:  string;
+  onCancel: () => void;
+  onDone:   () => void;
+}
+
+function IdsCloseForm({ issue, userId, onCancel, onDone }: IdsCloseFormProps) {
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  const trimmed = notes.trim().length;
+  const remaining = Math.max(0, ISSUE_RESOLUTION_MIN_LENGTH - trimmed);
+
+  async function close() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await $fetch<{ issue?: Issue; error?: string; message?: string }>(
+        `/api/issues/${issue.id}/close`,
+        {
+          method: "PUT",
+          body:   JSON.stringify({
+            resolutionNotes: notes,
+            closedById:      userId,
+          }),
+        },
+      );
+      if (res?.error) { setError(res.message ?? res.error); return; }
+      onDone();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to close");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <Label htmlFor="ids-close-notes" className="text-xs">
+        Resolution notes
+        <span className="ml-1 text-muted-foreground">
+          ({trimmed}/{ISSUE_RESOLUTION_MIN_LENGTH})
+        </span>
+      </Label>
+      <Textarea
+        id="ids-close-notes"
+        rows={4}
+        placeholder="What was decided, why no action is required, and what to watch."
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+      />
+      {remaining > 0 && (
+        <p className="text-[11px] text-amber-600">
+          {remaining} more character{remaining === 1 ? "" : "s"} required.
+        </p>
       )}
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      <div className="flex justify-end gap-1.5">
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={close} disabled={saving || remaining > 0}>
+          {saving ? "Closing…" : "Close issue"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface IdsCreateTodoFormProps {
+  issue:    Issue;
+  meeting:  Meeting;
+  members:  User[];
+  userId:   string;
+  onCancel: () => void;
+  onDone:   () => void;
+}
+
+function defaultDueDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function IdsCreateTodoForm(
+  { issue, meeting, members, userId, onCancel, onDone }: IdsCreateTodoFormProps,
+) {
+  const [title,      setTitle]      = useState(issue.title);
+  const [assigneeId, setAssigneeId] = useState(issue.assignedToId ?? userId);
+  const [dueDate,    setDueDate]    = useState(defaultDueDate());
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+
+  async function create() {
+    if (!title.trim())      { setError("Title is required."); return; }
+    if (!assigneeId)        { setError("Pick an assignee.");  return; }
+    if (!dueDate)           { setError("Pick a due date.");   return; }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const todoRes = await $fetch<{ todo?: Todo; error?: string; message?: string }>(
+        "/api/todos",
+        {
+          method: "POST",
+          body:   JSON.stringify({
+            title:     title.trim(),
+            ownerId:   assigneeId,
+            assignedToId: assigneeId,
+            teamId:    meeting.teamId,
+            meetingId: meeting.id,
+            dueDate,
+          }),
+        },
+      );
+      if (todoRes?.error) { setError(todoRes.message ?? todoRes.error); return; }
+
+      // Auto-close the issue with notes referencing the todo (≥50 chars).
+      const assignee = members.find((m) => m.id === assigneeId);
+      const notes =
+        `Resolved during IDS by creating to-do for ${assignee?.name ?? "owner"} ` +
+        `(due ${dueDate}): ${title.trim()}.`;
+
+      const closeRes = await $fetch<{ issue?: Issue; error?: string; message?: string }>(
+        `/api/issues/${issue.id}/close`,
+        {
+          method: "PUT",
+          body:   JSON.stringify({ resolutionNotes: notes, closedById: userId }),
+        },
+      );
+      if (closeRes?.error) { setError(closeRes.message ?? closeRes.error); return; }
+
+      onDone();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create to-do");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="ids-todo-title" className="text-xs">To-do title</Label>
+        <Input
+          id="ids-todo-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="ids-todo-assignee" className="text-xs">Assignee</Label>
+          <Select value={assigneeId} onValueChange={setAssigneeId}>
+            <SelectTrigger id="ids-todo-assignee">
+              <SelectValue placeholder="Pick a person" />
+            </SelectTrigger>
+            <SelectContent>
+              {members.map((m) => (
+                <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ids-todo-due" className="text-xs">Due date</Label>
+          <Input
+            id="ids-todo-due"
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      <div className="flex justify-end gap-1.5">
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={create} disabled={saving}>
+          {saving ? "Creating…" : "Create to-do"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface IdsMoveToRockFormProps {
+  issue:    Issue;
+  userId:   string;
+  onCancel: () => void;
+  onDone:   () => void;
+}
+
+function IdsMoveToRockForm({ issue, userId, onCancel, onDone }: IdsMoveToRockFormProps) {
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
+
+  async function move() {
+    setSaving(true);
+    setError(null);
+    try {
+      // Mark as pending Rock creation: status → pending_closure and escalate
+      // to Leadership so the next Quarterly picks it up for Day 3 conversion.
+      const statusRes = await $fetch<{ issue?: Issue; error?: string; message?: string }>(
+        `/api/issues/${issue.id}/status`,
+        {
+          method: "PUT",
+          body:   JSON.stringify({ status: "pending_closure", userId }),
+        },
+      );
+      if (statusRes?.error) { setError(statusRes.message ?? statusRes.error); return; }
+
+      const escRes = await $fetch<{ issue?: Issue; error?: string; message?: string }>(
+        `/api/issues/${issue.id}/escalate`,
+        { method: "PUT" },
+      );
+      if (escRes?.error) { setError(escRes.message ?? escRes.error); return; }
+
+      onDone();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to mark for Rock");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <p className="text-xs text-muted-foreground">
+        This sends the issue to the Quarterly Leadership Meeting (Day 3) where
+        it will be converted into a Rock. The issue stays open until then.
+      </p>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      <div className="flex justify-end gap-1.5">
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={move} disabled={saving}>
+          {saving ? "Marking…" : "Mark for Rock"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1523,6 +2066,7 @@ export default function LiveSessionPage() {
 
   const [detail,   setDetail]   = useState<MeetingDetail | null>(null);
   const [team,     setTeam]     = useState<Team | null>(null);
+  const [teams,    setTeams]    = useState<Team[]>([]);
   const [members,  setMembers]  = useState<User[]>([]);
   const [segments, setSegments] = useState<MeetingSegment[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -1544,7 +2088,9 @@ export default function LiveSessionPage() {
           $fetch<{ teams: Team[] }>("/api/teams"),
           $fetch<{ users: User[] }>(`/api/teams/${d.meeting.teamId}/members`).catch(() => ({ users: [] as User[] })),
         ]);
-        setTeam((tRes.teams ?? []).find((t) => t.id === d.meeting.teamId) ?? null);
+        const teamList = tRes.teams ?? [];
+        setTeams(teamList);
+        setTeam(teamList.find((t) => t.id === d.meeting.teamId) ?? null);
         setMembers(uRes.users ?? []);
       }
     } catch (err: unknown) {
@@ -1692,7 +2238,15 @@ export default function LiveSessionPage() {
               <TodoReviewPanel meeting={meeting} userId={userId} members={members} onParked={load} />
             )}
             {currentName === "ids" && detail && (
-              <IdsPanel meeting={meeting} detail={detail} />
+              <IdsPanel
+                meeting={meeting}
+                detail={detail}
+                members={members}
+                userId={userId}
+                isHost={isHost}
+                teamById={Object.fromEntries(teams.map((t) => [t.id, t]))}
+                onChange={load}
+              />
             )}
             {currentName === "wrap_up" && detail && (
               <WrapUpPanel
